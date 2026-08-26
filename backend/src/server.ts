@@ -16,7 +16,7 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: process.env.CLIENT_URL || '*',
+    origin: process.env.CLIENT_URL ? process.env.CLIENT_URL.replace(/\/$/, '') : '*',
     methods: ['GET', 'POST', 'PATCH', 'DELETE']
   }
 });
@@ -25,7 +25,8 @@ const io = new Server(server, {
 app.set('io', io);
 
 app.use(helmet());
-app.use(cors({ origin: process.env.CLIENT_URL || '*' }));
+const allowedOrigin = process.env.CLIENT_URL ? process.env.CLIENT_URL.replace(/\/$/, '') : '*';
+app.use(cors({ origin: allowedOrigin }));
 app.use(express.json());
 
 // Routes will be imported and used here
