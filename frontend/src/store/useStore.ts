@@ -50,18 +50,24 @@ export interface AppSettings {
 interface AppState {
   cart: CartItem[];
   settings: AppSettings;
+  isAuthenticated: boolean;
+  token: string | null;
   updateSettings: (newSettings: Partial<AppSettings>) => void;
   addToCart: (product: Product, customizations?: CustomizationOption[]) => void;
   removeFromCart: (productId: string) => void;
   updateQuantity: (productId: string, quantity: number) => void;
   clearCart: () => void;
   cartTotal: () => number;
+  setAuth: (token: string) => void;
+  logout: () => void;
 }
 
 export const useStore = create<AppState>()(
   persist(
     (set, get) => ({
       cart: [],
+      isAuthenticated: false,
+      token: null,
       settings: {
         storeName: 'Waffle Circle Flagship',
         wahaAutoNotify: true,
@@ -97,6 +103,8 @@ export const useStore = create<AppState>()(
           return total + (item.price + extraPrice) * item.quantity;
         }, 0);
       },
+      setAuth: (token: string) => set({ isAuthenticated: true, token }),
+      logout: () => set({ isAuthenticated: false, token: null }),
     }),
     {
       name: 'waffle-circle-storage',

@@ -2,8 +2,7 @@ import type { Metadata } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
-import Sidebar from "@/components/Sidebar";
-import Topbar from "@/components/Topbar";
+import ClientLayoutWrapper from "@/components/ClientLayoutWrapper";
 
 const plusJakartaSans = Plus_Jakarta_Sans({ 
   subsets: ["latin"],
@@ -28,13 +27,9 @@ export default function RootLayout({
         <div className="fixed top-0 left-1/4 w-[600px] h-[600px] bg-amber-500/5 rounded-full blur-[140px] pointer-events-none z-0" />
         <div className="fixed bottom-0 right-1/4 w-[500px] h-[500px] bg-amber-600/5 rounded-full blur-[160px] pointer-events-none z-0" />
 
-        <Sidebar />
-        <div className="flex-1 flex flex-col h-full overflow-hidden z-10 relative">
-          <Topbar />
-          <main className="flex-1 overflow-auto bg-transparent relative">
-            {children}
-          </main>
-        </div>
+        <ClientLayoutWrapper>
+          {children}
+        </ClientLayoutWrapper>
         <Toaster theme="dark" richColors />
       </body>
     </html>

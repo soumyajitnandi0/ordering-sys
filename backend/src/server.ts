@@ -30,11 +30,14 @@ app.use(cors({ origin: allowedOrigin }));
 app.use(express.json());
 
 // Routes will be imported and used here
+import authRoutes from './routes/auth';
 import productRoutes from './routes/products';
 import orderRoutes from './routes/orders';
+import { requireAuth } from './middleware/auth';
 
-app.use('/api/products', productRoutes);
-app.use('/api/orders', orderRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/products', requireAuth, productRoutes);
+app.use('/api/orders', requireAuth, orderRoutes);
 
 // Setup Socket
 setupSocket(io);

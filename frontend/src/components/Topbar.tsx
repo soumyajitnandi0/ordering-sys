@@ -1,13 +1,21 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { usePathname } from "next/navigation";
-import { Bell, User, Clock, ShieldCheck } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { Bell, User, Clock, ShieldCheck, LogOut } from "lucide-react";
+import { useStore } from "@/store/useStore";
 
 export default function Topbar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const logout = useStore((state) => state.logout);
   const [time, setTime] = useState<string>("");
   const [date, setDate] = useState<string>("");
+
+  const handleLogout = () => {
+    logout();
+    router.push('/login');
+  };
 
   useEffect(() => {
     const updateTime = () => {
@@ -81,6 +89,15 @@ export default function Topbar() {
             <span className="text-[10px] text-slate-400 font-medium">Station 01</span>
           </div>
         </div>
+
+        {/* Logout Button */}
+        <button 
+          onClick={handleLogout}
+          className="w-10 h-10 rounded-full bg-red-500/10 border border-red-500/20 hover:bg-red-500 hover:text-white flex items-center justify-center text-red-400 transition-colors shadow-sm"
+          title="Logout"
+        >
+          <LogOut className="w-4 h-4 ml-0.5" />
+        </button>
       </div>
     </header>
   );
