@@ -8,6 +8,9 @@ export interface IProduct extends Document {
   image?: string;
   available: boolean;
   sortOrder?: number;
+  isCustomizable?: boolean;
+  customizationOptions?: { name: string; extraPrice: number }[];
+  maxSelections?: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -21,6 +24,12 @@ const ProductSchema: Schema = new Schema(
     image: { type: String },
     available: { type: Boolean, default: true },
     sortOrder: { type: Number, default: 0 },
+    isCustomizable: { type: Boolean, default: false },
+    customizationOptions: [{
+      name: { type: String, required: true },
+      extraPrice: { type: Number, default: 0 }
+    }],
+    maxSelections: { type: Number, default: 1 },
   },
   { timestamps: true }
 );

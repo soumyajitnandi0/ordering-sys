@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import api from '@/lib/api';
-import { Order } from '@/store/useStore';
+import { Order, useStore } from '@/store/useStore';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { io, Socket } from 'socket.io-client';
@@ -28,6 +28,7 @@ export default function KitchenPage() {
   const [connected, setConnected] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const { settings } = useStore();
 
   useEffect(() => {
     fetchTodayOrders();
@@ -45,7 +46,7 @@ export default function KitchenPage() {
       if (soundEnabled && audioRef.current) {
         audioRef.current.play().catch(e => console.log('Audio play failed', e));
       }
-      toast.info(`New Order Ticket #${String(newOrder.tokenNumber).padStart(3, '0')}`, {
+      toast.info(`New Order Ticket #${String(newOrder.tokenNumber).padStart(settings.tokenDigits, '0')}`, {
         description: 'New ticket sent from POS terminal.'
       });
     });
@@ -82,6 +83,20 @@ export default function KitchenPage() {
     const mins = Math.floor(elapsedMs / 60000);
     if (mins < 1) return 'Just now';
     return `${mins}m ago`;
+  };
+
+  const getCategoryShortForm = (category?: string) => {
+    if (!category) return '';
+    const map: Record<string, string> = {
+      'MINION WAFFLES': 'MINI',
+      'SIGNATURE WAFFLES': 'SIGN',
+      'STICK WAFFLES': 'STICK',
+      'WAFFLE PIZZA': 'PIZZA',
+      'HERO SECTION': 'HERO',
+      'BOBA MOCKTAILS': 'BOBA',
+      'ADD-ONS': 'ADD-ON'
+    };
+    return map[category] || category.substring(0, 4).toUpperCase();
   };
 
   const activeOrders = orders.filter(o => ['NEW', 'PREPARING', 'READY'].includes(o.status));
@@ -172,7 +187,7 @@ export default function KitchenPage() {
                     <div>
                       <span className="text-[10px] text-amber-400 font-extrabold uppercase tracking-widest block">Token Ticket</span>
                       <span className="text-3xl font-black font-mono tracking-tight bg-gradient-to-r from-amber-200 via-amber-400 to-amber-500 bg-clip-text text-transparent">
-                        #{String(order.tokenNumber).padStart(3, '0')}
+                        #{String(order.tokenNumber).padStart(settings.tokenDigits, '0')}
                       </span>
                     </div>
                     
@@ -184,12 +199,28 @@ export default function KitchenPage() {
 
                   {/* Ticket Item List */}
                   <div className="p-4 space-y-2">
-                    {order.items.map((item, idx) => (
+                    {order.items.map((item: any, idx: number) => (
                       <div 
                         key={idx} 
                         className="flex justify-between items-center p-3 rounded-xl bg-white/[0.03] border border-white/[0.05] hover:border-amber-500/20 transition-all"
                       >
-                        <span className="text-white font-bold text-sm">{item.name}</span>
+                        <div className="flex flex-col">
+                          <div className="flex items-center gap-2">
+                            {item.category && (
+                              <span className="text-[9px] font-black font-mono bg-white/[0.12] text-amber-400/90 px-1.5 py-0.5 rounded border border-white/[0.08] shadow-sm uppercase tracking-wide">
+                                {getCategoryShortForm(item.category)}
+                              </span>
+                            )}
+                            <span className="text-white font-bold text-sm">
+                              {item.name.replace(' (Milk/White/Dark)', '').replace(' (Any 2)', '')}
+                            </span>
+                          </div>
+                          {item.customizations && item.customizations.length > 0 && (
+                            <span className="text-[10px] text-amber-400 font-medium mt-0.5">
+                              {item.customizations.map((c: any) => c.name).join(' • ')}
+                            </span>
+                          )}
+                        </div>
                         <span className="font-mono font-black text-xs text-black bg-amber-400 px-2.5 py-1 rounded-lg shadow-sm border border-amber-300">
                           {item.quantity}x
                         </span>

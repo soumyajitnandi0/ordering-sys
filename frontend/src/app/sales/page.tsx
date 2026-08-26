@@ -11,7 +11,8 @@ import {
   ArrowUpRight, 
   Sparkles,
   BarChart3,
-  Layers
+  Layers,
+  Wallet
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -21,6 +22,10 @@ import {
   YAxis,
   Tooltip,
   CartesianGrid,
+  PieChart,
+  Pie,
+  Cell,
+  Legend
 } from 'recharts';
 import { motion } from 'framer-motion';
 
@@ -30,30 +35,45 @@ export default function SalesPage() {
 
   useEffect(() => {
     fetchSales();
+    const interval = setInterval(fetchSales, 5 * 60 * 1000); // Live update every 5 minutes
+    return () => clearInterval(interval);
   }, [timeRange]);
 
   const fetchSales = async () => {
     try {
-      const res = await api.get('/analytics/sales');
+      const res = await api.get('/orders/analytics');
       setSalesData(res.data);
     } catch (err) {
       console.error(err);
     }
   };
 
-  const chartData = [
-    { time: '09:00', revenue: 1400, orders: 8 },
-    { time: '11:00', revenue: 3200, orders: 18 },
-    { time: '13:00', revenue: 6800, orders: 34 },
-    { time: '15:00', revenue: 5400, orders: 28 },
-    { time: '17:00', revenue: 8900, orders: 46 },
-    { time: '19:00', revenue: 11200, orders: 58 },
-    { time: '21:00', revenue: 7600, orders: 38 },
-  ];
+  const chartData = salesData?.hourlySales || [];
 
-  const totalRevenue = salesData?.totalRevenue || 44500;
-  const totalOrders = salesData?.totalOrders || 230;
-  const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+  const totalRevenue = salesData?.today?.revenue || 0;
+  const totalOrders = salesData?.today?.orders || 0;
+  const avgOrderValue = salesData?.today?.aov || 0;
+
+  const yesterdayRevenue = salesData?.yesterday?.revenue || 0;
+  const revGrowth = yesterdayRevenue > 0 
+    ? ((totalRevenue - yesterdayRevenue) / yesterdayRevenue * 100).toFixed(1) 
+    : 100;
+
+  const yesterdayOrders = salesData?.yesterday?.orders || 0;
+  const ordGrowth = yesterdayOrders > 0 
+    ? ((totalOrders - yesterdayOrders) / yesterdayOrders * 100).toFixed(1) 
+    : 100;
+    
+  const topProducts = salesData?.topProducts || [];
+  const maxTopQty = topProducts.length > 0 ? topProducts[0].quantity : 1;
+  const totalUnits = salesData?.today?.unitsSold || 0;
+
+  const paymentMetrics = salesData?.paymentMetrics || { cash: { revenue: 0 }, upi: { revenue: 0 } };
+  const paymentData = [
+    { name: 'CASH', value: paymentMetrics.cash.revenue },
+    { name: 'UPI', value: paymentMetrics.upi.revenue }
+  ];
+  const PIE_COLORS = ['#E6B462', '#10b981'];
 
   return (
     <div className="flex flex-col h-full overflow-y-auto p-6 md:p-8 space-y-8 custom-scrollbar">
@@ -122,7 +142,7 @@ export default function SalesPage() {
           </div>
           <div className="mt-3 flex items-center gap-1.5 text-xs text-emerald-400 font-semibold">
             <ArrowUpRight className="w-4 h-4" />
-            <span>+18.4% from yesterday</span>
+            <span>{Number(revGrowth) > 0 ? '+' : ''}{revGrowth}% from yesterday</span>
           </div>
         </motion.div>
 
@@ -142,7 +162,7 @@ export default function SalesPage() {
           </h2>
           <div className="mt-3 flex items-center gap-1.5 text-xs text-emerald-400 font-semibold">
             <ArrowUpRight className="w-4 h-4" />
-            <span>+12% volume</span>
+            <span>{Number(ordGrowth) > 0 ? '+' : ''}{ordGrowth}% volume</span>
           </div>
         </motion.div>
 
@@ -177,10 +197,10 @@ export default function SalesPage() {
             </div>
           </div>
           <h2 className="text-3xl font-black text-white font-mono tracking-tight">
-            384 units
+            {totalUnits} units
           </h2>
           <div className="mt-3 flex items-center gap-1.5 text-xs text-purple-300 font-semibold">
-            <span>Peak hour: 7:00 PM</span>
+            <span>Peak hour: {salesData?.today?.orders > 0 ? chartData.reduce((max: any, c: any) => c.orders > max.orders ? c : max, chartData[0])?.hour : 'N/A'}</span>
           </div>
         </motion.div>
 
@@ -213,7 +233,7 @@ export default function SalesPage() {
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" vertical={false} />
-                <XAxis dataKey="time" stroke="#94a3b8" fontSize={12} tickLine={false} />
+                <XAxis dataKey="hour" stroke="#94a3b8" fontSize={12} tickLine={false} />
                 <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} tickFormatter={(v) => `₹${v}`} />
                 <Tooltip 
                   contentStyle={{ backgroundColor: '#09090d', borderColor: '#ffffff20', borderRadius: '12px', color: '#fff' }}
@@ -234,28 +254,26 @@ export default function SalesPage() {
             <p className="text-xs text-slate-400 mb-6">Popular items ranking by order volume</p>
 
             <div className="space-y-5">
-              {[
-                { name: 'Belgian Chocolate Waffle', count: 86, revenue: 15480, pct: 85 },
-                { name: 'Triple Chocolate Overload', count: 64, revenue: 12800, pct: 65 },
-                { name: 'Nutella Strawberry Waffle', count: 48, revenue: 9600, pct: 50 },
-                { name: 'Oreo Thickshake', count: 38, revenue: 4940, pct: 40 },
-                { name: 'Dark Chocolate Cone', count: 28, revenue: 2240, pct: 25 },
-              ].map((item, i) => (
-                <div key={i} className="space-y-1.5">
-                  <div className="flex justify-between text-xs font-semibold">
-                    <span className="text-white flex items-center gap-2">
-                      <span className="text-amber-400 font-mono">#{i + 1}</span> {item.name}
-                    </span>
-                    <span className="text-amber-300 font-mono">₹{item.revenue.toLocaleString()} ({item.count})</span>
+              {topProducts.length === 0 ? (
+                <div className="text-sm text-slate-500 py-4 text-center">No sales data today</div>
+              ) : (
+                topProducts.map((item: any, i: number) => (
+                  <div key={i} className="space-y-1.5">
+                    <div className="flex justify-between text-xs font-semibold">
+                      <span className="text-white flex items-center gap-2">
+                        <span className="text-amber-400 font-mono">#{i + 1}</span> {item.name}
+                      </span>
+                      <span className="text-amber-300 font-mono">₹{item.revenue.toLocaleString()} ({item.quantity})</span>
+                    </div>
+                    <div className="w-full h-2 bg-white/[0.06] rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-gradient-to-r from-amber-500 to-amber-300 rounded-full" 
+                        style={{ width: `${(item.quantity / maxTopQty) * 100}%` }}
+                      />
+                    </div>
                   </div>
-                  <div className="w-full h-2 bg-white/[0.06] rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-gradient-to-r from-amber-500 to-amber-300 rounded-full" 
-                      style={{ width: `${item.pct}%` }}
-                    />
-                  </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
 
@@ -264,6 +282,57 @@ export default function SalesPage() {
           </div>
         </div>
 
+      </div>
+
+      {/* Secondary Analytics Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        {/* Payment Split Chart */}
+        <div className="glass-panel rounded-2xl p-6 border border-white/[0.08] flex flex-col">
+          <div className="flex justify-between items-center mb-6">
+            <div>
+              <h3 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
+                <Wallet className="w-5 h-5 text-amber-400" /> Payment Split
+              </h3>
+              <p className="text-xs text-slate-400">Cash vs UPI distribution</p>
+            </div>
+          </div>
+          
+          <div className="h-64 w-full flex flex-col justify-center">
+            {paymentData[0].value === 0 && paymentData[1].value === 0 ? (
+              <div className="text-sm text-slate-500 text-center py-10">No payment data today</div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={paymentData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={80}
+                    paddingAngle={5}
+                    dataKey="value"
+                    stroke="none"
+                  >
+                    {paymentData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip 
+                    contentStyle={{ backgroundColor: '#09090d', borderColor: '#ffffff20', borderRadius: '12px', color: '#fff' }}
+                    formatter={(value: any) => [`₹${value}`, 'Revenue']}
+                  />
+                  <Legend 
+                    verticalAlign="bottom" 
+                    height={36} 
+                    iconType="circle" 
+                    formatter={(value, entry, index) => <span className="text-slate-300 text-xs font-semibold mr-4">{value}</span>}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </div>
       </div>
 
     </div>

@@ -1,4 +1,10 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
+
+export interface CustomizationOption {
+  name: string;
+  extraPrice: number;
+}
 
 export interface Product {
   _id: string;
@@ -7,56 +13,93 @@ export interface Product {
   category: string;
   image?: string;
   available: boolean;
+  isCustomizable?: boolean;
+  maxSelections?: number;
+  customizationOptions?: CustomizationOption[];
 }
 
 export interface CartItem extends Product {
   quantity: number;
+  cartItemId: string;
+  customizations?: CustomizationOption[];
 }
 
 export interface Order {
   _id: string;
   tokenNumber: number;
   tokenDate: string;
-  items: { productId: string; name: string; quantity: number; price: number }[];
+  customerPhone?: string;
+  items: { productId: string; name: string; quantity: number; price: number; customizations?: CustomizationOption[]; category?: string }[];
   status: 'NEW' | 'PREPARING' | 'READY' | 'DELIVERED' | 'CANCELLED';
   subtotal: number;
   total: number;
   createdAt: string;
-  waitingTime?: number; // computed client side
+  readyAt?: string;
+  deliveredAt?: string;
+  paymentMethod?: string;
+  waitingTime?: number;
+}
+
+export interface AppSettings {
+  storeName: string;
+  wahaAutoNotify: boolean;
+  dailyReset: boolean;
+  tokenDigits: number;
 }
 
 interface AppState {
   cart: CartItem[];
-  addToCart: (product: Product) => void;
+  settings: AppSettings;
+  updateSettings: (newSettings: Partial<AppSettings>) => void;
+  addToCart: (product: Product, customizations?: CustomizationOption[]) => void;
   removeFromCart: (productId: string) => void;
   updateQuantity: (productId: string, quantity: number) => void;
   clearCart: () => void;
   cartTotal: () => number;
 }
 
-export const useStore = create<AppState>((set, get) => ({
-  cart: [],
-  addToCart: (product) => set((state) => {
-    const existing = state.cart.find((item) => item._id === product._id);
-    if (existing) {
-      return {
+export const useStore = create<AppState>()(
+  persist(
+    (set, get) => ({
+      cart: [],
+      settings: {
+        storeName: 'Waffle Circle Flagship',
+        wahaAutoNotify: true,
+        dailyReset: true,
+        tokenDigits: 3,
+      },
+      updateSettings: (newSettings) => set((state) => ({ settings: { ...state.settings, ...newSettings } })),
+      addToCart: (product, customizations = []) => set((state) => {
+        const sortedCustomizations = [...customizations].map(c => c.name).sort();
+        const cartItemId = `${product._id}-${sortedCustomizations.join('-')}`;
+        const existing = state.cart.find((item) => item.cartItemId === cartItemId);
+        if (existing) {
+          return {
+            cart: state.cart.map((item) =>
+              item.cartItemId === cartItemId ? { ...item, quantity: item.quantity + 1 } : item
+            ),
+          };
+        }
+        return { cart: [...state.cart, { ...product, quantity: 1, cartItemId, customizations }] };
+      }),
+      removeFromCart: (cartItemId) => set((state) => ({
+        cart: state.cart.filter((item) => item.cartItemId !== cartItemId),
+      })),
+      updateQuantity: (cartItemId, quantity) => set((state) => ({
         cart: state.cart.map((item) =>
-          item._id === product._id ? { ...item, quantity: item.quantity + 1 } : item
+          item.cartItemId === cartItemId ? { ...item, quantity } : item
         ),
-      };
+      })),
+      clearCart: () => set({ cart: [] }),
+      cartTotal: () => {
+        return get().cart.reduce((total, item) => {
+          const extraPrice = item.customizations?.reduce((sum, c) => sum + (c.extraPrice || 0), 0) || 0;
+          return total + (item.price + extraPrice) * item.quantity;
+        }, 0);
+      },
+    }),
+    {
+      name: 'waffle-circle-storage',
     }
-    return { cart: [...state.cart, { ...product, quantity: 1 }] };
-  }),
-  removeFromCart: (productId) => set((state) => ({
-    cart: state.cart.filter((item) => item._id !== productId),
-  })),
-  updateQuantity: (productId, quantity) => set((state) => ({
-    cart: state.cart.map((item) =>
-      item._id === productId ? { ...item, quantity } : item
-    ),
-  })),
-  clearCart: () => set({ cart: [] }),
-  cartTotal: () => {
-    return get().cart.reduce((total, item) => total + item.price * item.quantity, 0);
-  },
-}));
+  )
+);

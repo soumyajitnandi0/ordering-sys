@@ -5,11 +5,15 @@ export interface IOrderItem {
   name: string;
   quantity: number;
   price: number;
+  customizations?: { name: string; extraPrice: number }[];
+  category?: string;
 }
 
 export interface IOrder extends Document {
   tokenNumber: number;
   tokenDate: string;
+  paymentMethod: 'CASH' | 'UPI';
+  customerPhone?: string;
   items: IOrderItem[];
   subtotal: number;
   total: number;
@@ -27,12 +31,19 @@ const OrderItemSchema: Schema = new Schema({
   name: { type: String, required: true },
   quantity: { type: Number, required: true },
   price: { type: Number, required: true },
+  customizations: [{
+    name: { type: String, required: true },
+    extraPrice: { type: Number, default: 0 }
+  }],
+  category: { type: String },
 });
 
 const OrderSchema: Schema = new Schema(
   {
     tokenNumber: { type: Number, required: true },
     tokenDate: { type: String, required: true },
+    paymentMethod: { type: String, enum: ['CASH', 'UPI'], required: true, default: 'UPI' },
+    customerPhone: { type: String },
     items: { type: [OrderItemSchema], required: true },
     subtotal: { type: Number, required: true },
     total: { type: Number, required: true },

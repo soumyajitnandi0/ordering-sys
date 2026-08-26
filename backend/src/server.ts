@@ -1,5 +1,6 @@
 import express from 'express';
 import http from 'http';
+import mongoose from 'mongoose';
 import { Server } from 'socket.io';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -38,6 +39,26 @@ app.use('/api/orders', orderRoutes);
 setupSocket(io);
 
 const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => {
+const serverInstance = server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
+
+// Graceful Shutdown Handler
+const gracefulShutdown = () => {
+  console.log('Received kill signal, shutting down gracefully');
+  serverInstance.close(() => {
+    console.log('Closed out remaining connections');
+    mongoose.connection.close(false).then(() => {
+      console.log('MongoDb connection closed.');
+      process.exit(0);
+    });
+  });
+
+  setTimeout(() => {
+    console.error('Could not close connections in time, forcefully shutting down');
+    process.exit(1);
+  }, 10000);
+};
+
+process.on('SIGTERM', gracefulShutdown);
+process.on('SIGINT', gracefulShutdown);

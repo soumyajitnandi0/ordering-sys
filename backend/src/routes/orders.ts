@@ -8,7 +8,7 @@ const router = Router();
 
 router.post('/', async (req, res) => {
   try {
-    const { items } = req.body;
+    const { items, customerPhone, paymentMethod = 'UPI' } = req.body;
     if (!items || !items.length) {
       return res.status(400).json({ error: 'Order must contain items' });
     }
@@ -21,15 +21,33 @@ router.post('/', async (req, res) => {
       if (!product) return res.status(400).json({ error: `Product not found: ${item.productId}` });
       if (!product.available) return res.status(400).json({ error: `Product unavailable: ${product.name}` });
 
-      const price = product.price;
+      const customizations = item.customizations || [];
+      
+      let extraPriceSum = 0;
+      const validCustomizations: { name: string; extraPrice: number }[] = [];
+
+      for (const reqCust of customizations) {
+        const custName = typeof reqCust === 'string' ? reqCust : reqCust.name;
+        const matchingOption = product.customizationOptions?.find((o: any) => o.name === custName);
+        if (matchingOption) {
+          extraPriceSum += matchingOption.extraPrice || 0;
+          validCustomizations.push({ name: matchingOption.name, extraPrice: matchingOption.extraPrice || 0 });
+        } else {
+          validCustomizations.push({ name: custName, extraPrice: 0 });
+        }
+      }
+
+      const finalPrice = product.price + extraPriceSum;
       const quantity = item.quantity;
-      subtotal += price * quantity;
+      subtotal += finalPrice * quantity;
 
       orderItems.push({
         productId: product._id,
         name: product.name,
         quantity,
-        price,
+        price: finalPrice,
+        customizations: validCustomizations,
+        category: product.category,
       });
     }
 
@@ -38,6 +56,8 @@ router.post('/', async (req, res) => {
     const order = new Order({
       tokenNumber,
       tokenDate,
+      paymentMethod,
+      customerPhone,
       items: orderItems,
       subtotal,
       total: subtotal,
@@ -145,16 +165,47 @@ router.get('/analytics', async (req, res) => {
       }
     });
 
+    // Calculate total units sold excluding addons
+    let todayUnitsSold = 0;
+    todayOrders.forEach(order => {
+      order.items.forEach((item: any) => {
+        if (item.category !== 'ADD-ONS') {
+          todayUnitsSold += item.quantity;
+        }
+      });
+    });
+
+    let cashOrders = 0;
+    let upiOrders = 0;
+    let cashRevenue = 0;
+    let upiRevenue = 0;
+
+    todayOrders.forEach(order => {
+      // @ts-ignore - Handle possible lack of paymentMethod in older records by defaulting to CASH
+      if (order.paymentMethod === 'UPI') {
+        upiOrders += 1;
+        upiRevenue += order.total;
+      } else {
+        cashOrders += 1;
+        cashRevenue += order.total;
+      }
+    });
+
     res.json({
       today: {
         revenue: todayRevenue,
         orders: todayOrders.length,
-        aov: todayAOV
+        aov: todayAOV,
+        unitsSold: todayUnitsSold
       },
       yesterday: {
         revenue: yesterdayRevenue,
         orders: yesterdayOrders.length,
         aov: yesterdayAOV
+      },
+      paymentMetrics: {
+        cash: { orders: cashOrders, revenue: cashRevenue },
+        upi: { orders: upiOrders, revenue: upiRevenue }
       },
       topProducts,
       hourlySales: hourlySales.filter(h => h.orders > 0 || parseInt(h.hour) >= 8 && parseInt(h.hour) <= 22) // Filter relevant hours

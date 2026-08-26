@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
-import { Order } from '@/store/useStore';
+import { Order, useStore } from '@/store/useStore';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -20,11 +20,28 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
+const getMakingTime = (order: Order) => {
+  const start = new Date(order.createdAt).getTime();
+  let end = null;
+  if (order.readyAt) end = new Date(order.readyAt).getTime();
+  else if (order.deliveredAt) end = new Date(order.deliveredAt).getTime();
+  
+  if (end) {
+    const diffMins = Math.max(0, Math.round((end - start) / 60000));
+    return `${diffMins}m prep`;
+  } else if (order.status === 'NEW' || order.status === 'PREPARING') {
+    const diffMins = Math.max(0, Math.round((new Date().getTime() - start) / 60000));
+    return `${diffMins}m elapsed`;
+  }
+  return '';
+};
+
 export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const { settings } = useStore();
 
   useEffect(() => {
     fetchOrders();
@@ -71,8 +88,9 @@ export default function OrdersPage() {
 
   const filteredOrders = orders.filter(order => {
     const matchesStatus = statusFilter === 'ALL' || order.status === statusFilter;
-    const tokenStr = String(order.tokenNumber);
+    const tokenStr = String(order.tokenNumber).padStart(settings.tokenDigits, '0');
     const matchesSearch = tokenStr.includes(searchQuery.replace('#', '')) || 
+                          (order.customerPhone && order.customerPhone.includes(searchQuery)) ||
                           order.items.some(i => i.name.toLowerCase().includes(searchQuery.toLowerCase()));
     return matchesStatus && matchesSearch;
   });
@@ -95,7 +113,7 @@ export default function OrdersPage() {
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <Input 
               type="text" 
-              placeholder="Search token # or item..." 
+              placeholder="Search token, mobile or item..." 
               className="bg-white/[0.04] border-white/[0.08] text-white placeholder:text-slate-500 rounded-xl pl-10 h-11 focus-visible:ring-amber-500/50"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -147,18 +165,24 @@ export default function OrdersPage() {
                 filteredOrders.map((order) => (
                   <tr key={order._id} className="hover:bg-white/[0.02] transition-colors group">
                     <td className="py-4 px-6 font-black font-mono text-amber-400 text-base">
-                      #{String(order.tokenNumber).padStart(3, '0')}
+                      #{String(order.tokenNumber).padStart(settings.tokenDigits, '0')}
                     </td>
                     <td className="py-4 px-6 max-w-xs">
                       <div className="truncate font-medium text-white">
                         {order.items.map(i => `${i.name} (${i.quantity}x)`).join(', ')}
                       </div>
                     </td>
-                    <td className="py-4 px-6 font-bold font-mono text-white">
-                      ₹{order.total ? order.total.toFixed(0) : '—'}
+                    <td className="py-4 px-6">
+                      <div className="font-bold font-mono text-white">
+                        ₹{order.total ? order.total.toFixed(0) : '—'}
+                      </div>
+                      <div className="text-[9px] text-emerald-400/80 font-bold tracking-widest mt-1">
+                        {order.paymentMethod || 'CASH'}
+                      </div>
                     </td>
                     <td className="py-4 px-6 text-xs text-slate-400 font-mono">
-                      {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      <div>{new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                      <div className="text-[10px] text-amber-500/80 font-semibold mt-0.5">{getMakingTime(order)}</div>
                     </td>
                     <td className="py-4 px-6">
                       {getStatusBadge(order.status)}
@@ -186,25 +210,60 @@ export default function OrdersPage() {
         <DialogContent className="bg-[#0c0c12] text-white border-white/[0.1] rounded-2xl max-w-lg">
           <DialogHeader>
             <DialogTitle className="text-2xl font-black font-mono text-amber-400 flex items-center justify-between">
-              <span>TOKEN #{selectedOrder?.tokenNumber ? String(selectedOrder.tokenNumber).padStart(3, '0') : ''}</span>
-              {selectedOrder && getStatusBadge(selectedOrder.status)}
+              <span>TOKEN #{selectedOrder?.tokenNumber ? String(selectedOrder.tokenNumber).padStart(settings.tokenDigits, '0') : ''}</span>
+              <div className="flex flex-col items-end gap-1">
+                {selectedOrder && getStatusBadge(selectedOrder.status)}
+                {selectedOrder && (
+                  <span className="text-[10px] text-amber-500/80 font-bold uppercase tracking-widest bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
+                    {getMakingTime(selectedOrder)}
+                  </span>
+                )}
+              </div>
             </DialogTitle>
           </DialogHeader>
 
           {selectedOrder && (
             <div className="py-4 space-y-6">
+              <div className="flex gap-2">
+                <div className="flex items-center gap-2 text-sm text-slate-300 bg-white/[0.04] p-3 rounded-xl border border-white/[0.08] flex-1">
+                  <span className="font-semibold text-slate-400">Payment:</span>
+                  <span className="font-mono text-emerald-400 font-bold">{selectedOrder.paymentMethod || 'CASH'}</span>
+                </div>
+                {selectedOrder.customerPhone && (
+                  <div className="flex items-center gap-2 text-sm text-slate-300 bg-white/[0.04] p-3 rounded-xl border border-white/[0.08] flex-1">
+                    <span className="font-semibold text-slate-400">Mobile:</span>
+                    <span className="font-mono">{selectedOrder.customerPhone}</span>
+                  </div>
+                )}
+              </div>
+
               {/* Items Breakdown */}
               <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-4 space-y-3">
                 <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-widest">Ordered Items</h4>
                 {selectedOrder.items.map((item, idx) => (
                   <div key={idx} className="flex justify-between items-center text-sm py-1 border-b border-white/[0.04] last:border-none">
-                    <span className="font-semibold text-white">{item.name}</span>
+                    <div>
+                      <span className="font-semibold text-white">{item.name}</span>
+                      {item.customizations && item.customizations.length > 0 && (
+                        <span className="text-[10px] text-amber-400 font-medium block mt-0.5">
+                          {item.customizations.map((c: any) => c.name).join(', ')}
+                        </span>
+                      )}
+                    </div>
                     <div className="flex items-center gap-4 font-mono">
                       <span className="text-slate-400 text-xs">×{item.quantity}</span>
                       <span className="text-amber-300 font-bold">₹{(item.price * item.quantity).toFixed(0)}</span>
                     </div>
                   </div>
                 ))}
+              </div>
+
+              {/* Order Total */}
+              <div className="flex justify-between items-center text-sm bg-amber-500/10 p-3 rounded-xl border border-amber-500/20 shadow-inner">
+                <span className="font-extrabold text-amber-500 uppercase tracking-wider text-xs">Total Order Value</span>
+                <span className="text-amber-400 font-black font-mono text-xl">
+                  ₹{selectedOrder.total ? selectedOrder.total.toFixed(0) : '—'}
+                </span>
               </div>
 
               {/* Status Stepper Actions */}

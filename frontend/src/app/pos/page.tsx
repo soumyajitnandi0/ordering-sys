@@ -19,7 +19,9 @@ import {
   ShoppingBag,
   LayoutGrid,
   ListFilter,
-  X
+  X,
+  Phone,
+  MessageSquare
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -32,14 +34,12 @@ import {
 
 const categoryIcons: Record<string, string> = {
   'All': '✨',
-  'Waffles': '🧇',
-  'Belgian Waffles': '🧇',
-  'Fries': '🍟',
-  'Beverages': '🥤',
-  'Shakes': '🥤',
-  'Desserts': '🍨',
-  'Combos': '🍱',
-  'Pancakes': '🥞'
+  'Minion Waffles': '🧇',
+  'Signature Waffles': '✨',
+  'Stick Waffles': '🍢',
+  'Hero Treats': '🍓',
+  'Waffle Pizza': '🍕',
+  'Add-ons': '➕'
 };
 
 const getProductImage = (name: string, category: string) => {
@@ -69,15 +69,20 @@ export default function POSPage() {
   const [categories, setCategories] = useState<string[]>([]);
   const [activeCategory, setActiveCategory] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [isCreating, setIsCreating] = useState(false);
   const [latestToken, setLatestToken] = useState<number | null>(null);
   const [searchToken, setSearchToken] = useState('');
   const [searchedOrder, setSearchedOrder] = useState<any>(null);
+  const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'UPI'>('UPI');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isCustomizationOpen, setIsCustomizationOpen] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [selectedChocolates, setSelectedChocolates] = useState<any[]>([]);
   
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const { cart, addToCart, removeFromCart, updateQuantity, clearCart, cartTotal } = useStore();
+  const { cart, addToCart, removeFromCart, updateQuantity, clearCart, cartTotal, settings } = useStore();
 
   useEffect(() => {
     fetchProducts();
@@ -107,12 +112,25 @@ export default function POSPage() {
     if (cart.length === 0) return;
     setIsCreating(true);
     try {
-      const items = cart.map((item) => ({ productId: item._id, quantity: item.quantity }));
-      const res = await api.post('/orders', { items });
+      const items = cart.map((item) => ({ 
+        productId: item._id, 
+        quantity: item.quantity,
+        customizations: item.customizations || []
+      }));
+      const trimmedPhone = customerPhone.trim();
+
+      const res = await api.post('/orders', { 
+        items,
+        customerPhone: trimmedPhone || undefined,
+        paymentMethod
+      });
+
       setLatestToken(res.data.tokenNumber);
       clearCart();
+      setCustomerPhone('');
+      
       toast.success('Order Generated Successfully', {
-        description: `Token #${String(res.data.tokenNumber).padStart(3, '0')} sent to kitchen.`,
+        description: `Token #${String(res.data.tokenNumber).padStart(3, '0')} sent to kitchen${trimmedPhone ? ' & WhatsApp notified' : ''}.`,
       });
     } catch (err) {
       console.error(err);
@@ -156,8 +174,39 @@ export default function POSPage() {
   });
 
   const getCartQuantity = (productId: string) => {
+    return cart.filter(c => c._id === productId).reduce((sum, item) => sum + item.quantity, 0);
+  };
+
+  const handleProductClick = (product: Product) => {
+    if (!product.available) return;
+    if (product.isCustomizable && product.customizationOptions && product.customizationOptions.length > 0) {
+      setSelectedProduct(product);
+      setSelectedChocolates([]);
+      setIsCustomizationOpen(true);
+    } else {
+      addToCart(product);
+    }
+  };
+
+  const toggleChocolate = (choco: any, maxSelection: number) => {
+    setSelectedChocolates(prev => {
+      if (prev.some(c => c.name === choco.name)) return prev.filter(c => c.name !== choco.name);
+      if (prev.length < maxSelection) return [...prev, choco];
+      return prev;
+    });
+  };
+
+  const handleCustomizationSubmit = () => {
+    if (!selectedProduct) return;
+    addToCart(selectedProduct, selectedChocolates);
+    setIsCustomizationOpen(false);
+    setSelectedProduct(null);
+    setSelectedChocolates([]);
+  };
+
+  const getFirstCartItemId = (productId: string) => {
     const item = cart.find(c => c._id === productId);
-    return item ? item.quantity : 0;
+    return item ? item.cartItemId : '';
   };
 
   const getCategoryCount = (cat: string) => {
@@ -276,7 +325,7 @@ export default function POSPage() {
         </div>
 
         {/* Compact & Premium Product Catalog Grid */}
-        <ScrollArea className="flex-1 pr-3">
+        <div className="flex-1 overflow-y-auto pr-3 min-h-0 custom-scrollbar">
           {viewMode === 'grid' ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-3.5 pb-12">
               {filteredProducts.map((product) => {
@@ -296,7 +345,7 @@ export default function POSPage() {
                     } ${
                       !product.available ? 'opacity-50 grayscale cursor-not-allowed' : 'cursor-pointer'
                     }`}
-                    onClick={() => product.available && addToCart(product)}
+                    onClick={() => handleProductClick(product)}
                   >
                     {/* Left: Compact Thumbnail & In-Cart Badge */}
                     <div className="relative flex-shrink-0">
@@ -338,7 +387,15 @@ export default function POSPage() {
                             <button 
                               type="button"
                               className="w-6 h-6 rounded-lg bg-amber-500/20 hover:bg-amber-400 text-amber-300 hover:text-black flex items-center justify-center font-black text-xs transition-all active:scale-90"
-                              onClick={() => cartQty > 1 ? updateQuantity(product._id, cartQty - 1) : removeFromCart(product._id)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const cid = getFirstCartItemId(product._id);
+                                if (cid) {
+                                  const cItem = cart.find(c => c.cartItemId === cid);
+                                  if (cItem && cItem.quantity > 1) updateQuantity(cid, cItem.quantity - 1);
+                                  else removeFromCart(cid);
+                                }
+                              }}
                             >
                               <Minus className="w-3 h-3" />
                             </button>
@@ -348,7 +405,14 @@ export default function POSPage() {
                             <button 
                               type="button"
                               className="w-6 h-6 rounded-lg bg-amber-400 text-black hover:bg-amber-300 flex items-center justify-center font-black text-xs transition-all shadow-sm active:scale-90"
-                              onClick={() => updateQuantity(product._id, cartQty + 1)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const cid = getFirstCartItemId(product._id);
+                                if (cid) {
+                                  const cItem = cart.find(c => c.cartItemId === cid);
+                                  if (cItem) updateQuantity(cid, cItem.quantity + 1);
+                                }
+                              }}
                             >
                               <Plus className="w-3 h-3" />
                             </button>
@@ -359,7 +423,7 @@ export default function POSPage() {
                             className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-400 hover:bg-amber-400 hover:text-black border border-amber-500/30 flex items-center justify-center transition-all duration-200 shadow-sm group-hover:scale-105 active:scale-95"
                             onClick={(e) => {
                               e.stopPropagation();
-                              addToCart(product);
+                              handleProductClick(product);
                             }}
                           >
                             <Plus className="w-4 h-4" />
@@ -416,7 +480,15 @@ export default function POSPage() {
                             <button 
                               type="button"
                               className="w-6 h-6 rounded-lg bg-amber-500/20 hover:bg-amber-400 text-amber-300 hover:text-black flex items-center justify-center font-extrabold"
-                              onClick={() => cartQty > 1 ? updateQuantity(product._id, cartQty - 1) : removeFromCart(product._id)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const cid = getFirstCartItemId(product._id);
+                                if (cid) {
+                                  const cItem = cart.find(c => c.cartItemId === cid);
+                                  if (cItem && cItem.quantity > 1) updateQuantity(cid, cItem.quantity - 1);
+                                  else removeFromCart(cid);
+                                }
+                              }}
                             >
                               <Minus className="w-3 h-3" />
                             </button>
@@ -424,7 +496,14 @@ export default function POSPage() {
                             <button 
                               type="button"
                               className="w-6 h-6 rounded-lg bg-amber-400 text-black hover:bg-amber-300 flex items-center justify-center font-extrabold"
-                              onClick={() => updateQuantity(product._id, cartQty + 1)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const cid = getFirstCartItemId(product._id);
+                                if (cid) {
+                                  const cItem = cart.find(c => c.cartItemId === cid);
+                                  if (cItem) updateQuantity(cid, cItem.quantity + 1);
+                                }
+                              }}
                             >
                               <Plus className="w-3 h-3" />
                             </button>
@@ -433,7 +512,10 @@ export default function POSPage() {
                           <button 
                             type="button"
                             className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-400 hover:bg-amber-400 hover:text-black border border-amber-500/30 flex items-center justify-center transition-all"
-                            onClick={() => addToCart(product)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleProductClick(product);
+                            }}
                           >
                             <Plus className="w-4 h-4" />
                           </button>
@@ -447,7 +529,7 @@ export default function POSPage() {
               })}
             </div>
           )}
-        </ScrollArea>
+        </div>
       </div>
 
       {/* Right Side - Cart Panel */}
@@ -476,7 +558,7 @@ export default function POSPage() {
         </div>
 
         {/* Cart Items List */}
-        <ScrollArea className="flex-1 p-6">
+        <div className="flex-1 overflow-y-auto p-6 min-h-0 custom-scrollbar">
           {cart.length === 0 ? (
             <div className="h-64 flex flex-col items-center justify-center text-center p-6 border-2 border-dashed border-white/[0.06] rounded-2xl my-8">
               <div className="w-14 h-14 rounded-full bg-white/[0.03] border border-white/[0.08] flex items-center justify-center text-slate-500 mb-3">
@@ -490,16 +572,23 @@ export default function POSPage() {
               <AnimatePresence>
                 {cart.map((item) => (
                   <motion.div 
-                    key={item._id}
+                    key={item.cartItemId}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.95 }}
                     className="flex items-center justify-between p-3.5 rounded-xl bg-white/[0.03] border border-white/[0.06] hover:border-amber-500/20 transition-all"
                   >
                     <div className="flex flex-col min-w-0 pr-2">
-                      <span className="font-semibold text-sm text-white truncate">{item.name}</span>
+                      <span className="font-semibold text-sm text-white truncate">
+                        {item.name.replace(' (Milk/White/Dark)', '').replace(' (Any 2)', '')}
+                      </span>
+                      {item.customizations && item.customizations.length > 0 && (
+                        <span className="text-[10px] text-slate-400 truncate mb-0.5">
+                          {item.customizations.map((c: any) => c.extraPrice > 0 ? `${c.name} (+₹${c.extraPrice})` : c.name).join(', ')}
+                        </span>
+                      )}
                       <span className="text-xs text-amber-400/90 font-mono font-medium">
-                        ₹{item.price.toFixed(0)} × {item.quantity}
+                        ₹{(item.price + (item.customizations?.reduce((s: number, c: any) => s + (c.extraPrice || 0), 0) || 0)).toFixed(0)} × {item.quantity}
                       </span>
                     </div>
 
@@ -509,7 +598,7 @@ export default function POSPage() {
                         <button 
                           type="button"
                           className="w-6 h-6 rounded flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
-                          onClick={() => item.quantity > 1 ? updateQuantity(item._id, item.quantity - 1) : removeFromCart(item._id)}
+                          onClick={() => item.quantity > 1 ? updateQuantity(item.cartItemId, item.quantity - 1) : removeFromCart(item.cartItemId)}
                         >
                           <Minus className="w-3 h-3" />
                         </button>
@@ -517,14 +606,14 @@ export default function POSPage() {
                         <button 
                           type="button"
                           className="w-6 h-6 rounded flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
-                          onClick={() => updateQuantity(item._id, item.quantity + 1)}
+                          onClick={() => updateQuantity(item.cartItemId, item.quantity + 1)}
                         >
                           <Plus className="w-3 h-3" />
                         </button>
                       </div>
 
                       <span className="font-bold text-sm text-white w-14 text-right font-mono">
-                        ₹{(item.price * item.quantity).toFixed(0)}
+                        ₹{((item.price + (item.customizations?.reduce((s: number, c: any) => s + (c.extraPrice || 0), 0) || 0)) * item.quantity).toFixed(0)}
                       </span>
                     </div>
                   </motion.div>
@@ -532,10 +621,30 @@ export default function POSPage() {
               </AnimatePresence>
             </div>
           )}
-        </ScrollArea>
+        </div>
 
-        {/* Order Summary & Master Submit Action */}
+        {/* Order Summary & Customer WhatsApp Phone Section */}
         <div className="p-6 border-t border-white/[0.08] bg-white/[0.02]">
+          
+          <div className="mb-4 bg-emerald-500/[0.06] border border-emerald-500/20 p-3 rounded-2xl">
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-[11px] font-extrabold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
+                <Phone className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Customer Mobile (Optional)</span>
+              </label>
+            </div>
+            <div className="relative">
+              <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-emerald-400/70" />
+              <Input
+                type="tel"
+                placeholder="e.g. 9876543210"
+                className="bg-black/40 border-emerald-500/30 text-white placeholder:text-slate-500 rounded-xl pl-9 h-10 text-xs focus-visible:ring-emerald-400 font-mono"
+                value={customerPhone}
+                onChange={(e) => setCustomerPhone(e.target.value)}
+              />
+            </div>
+          </div>
+
           <div className="space-y-2 mb-5">
             <div className="flex justify-between text-xs text-slate-400">
               <span>Subtotal</span>
@@ -553,9 +662,28 @@ export default function POSPage() {
                   ₹{cartTotal().toFixed(0)}
                 </p>
               </div>
-              <span className="text-[10px] text-slate-400 bg-white/[0.04] px-2 py-1 rounded border border-white/[0.06]">
-                Cash Payment
-              </span>
+              <div className="flex bg-white/[0.04] p-1 rounded-lg border border-white/[0.06]">
+                <button
+                  onClick={() => setPaymentMethod('CASH')}
+                  className={`px-3 py-1.5 rounded text-xs font-bold transition-all ${
+                    paymentMethod === 'CASH' 
+                      ? 'bg-amber-500 text-black shadow-sm' 
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  CASH
+                </button>
+                <button
+                  onClick={() => setPaymentMethod('UPI')}
+                  className={`px-3 py-1.5 rounded text-xs font-bold transition-all ${
+                    paymentMethod === 'UPI' 
+                      ? 'bg-amber-500 text-black shadow-sm' 
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  UPI
+                </button>
+              </div>
             </div>
           </div>
 
@@ -594,12 +722,12 @@ export default function POSPage() {
                 </div>
 
                 <h3 className="text-xl font-bold text-white mb-1">Order Sent to Kitchen</h3>
-                <p className="text-xs text-slate-400 mb-6">Write this token on the customer's order slip.</p>
+                <p className="text-xs text-slate-400 mb-6">Token generated & WhatsApp notified.</p>
 
                 <div className="w-full bg-black/50 border border-amber-500/30 rounded-2xl py-6 mb-8 flex flex-col items-center justify-center glow-gold">
                   <span className="text-[11px] text-amber-400 uppercase tracking-widest font-extrabold mb-1">Token Number</span>
                   <span className="text-7xl font-black text-amber-300 tracking-tight font-mono leading-none">
-                    #{String(latestToken).padStart(3, '0')}
+                    #{String(latestToken).padStart(settings.tokenDigits, '0')}
                   </span>
                 </div>
 
@@ -634,6 +762,13 @@ export default function POSPage() {
               ))}
             </div>
 
+            {searchedOrder?.customerPhone && (
+              <div className="flex justify-between items-center px-1 text-xs text-emerald-400">
+                <span>Customer WhatsApp:</span>
+                <span className="font-mono font-bold">{searchedOrder.customerPhone}</span>
+              </div>
+            )}
+
             <div className="flex justify-between items-center py-2 px-1">
               <span className="text-slate-400 text-sm">Order Status:</span>
               <Badge className={`px-3 py-1 font-bold text-xs ${
@@ -652,6 +787,60 @@ export default function POSPage() {
                 MARK DELIVERED TO CUSTOMER
               </Button>
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+      {/* Customization Modal */}
+      <Dialog open={isCustomizationOpen} onOpenChange={setIsCustomizationOpen}>
+        <DialogContent className="bg-[#0f0f14] text-white border-amber-500/20 rounded-3xl max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold text-white mb-1">
+              Customize {selectedProduct?.name}
+            </DialogTitle>
+            <p className="text-xs text-amber-400/80 uppercase tracking-widest font-bold">
+              Select {selectedProduct?.maxSelections || 1} Option{(selectedProduct?.maxSelections || 1) > 1 ? 's' : ''}
+            </p>
+          </DialogHeader>
+
+          <div className="py-4 space-y-3">
+            {(() => {
+              const options = selectedProduct?.customizationOptions || [];
+              const maxSelection = selectedProduct?.maxSelections || 1;
+              
+              return options.map((choco: any) => {
+                const isSelected = selectedChocolates.some(c => c.name === choco.name);
+                
+                return (
+                  <div 
+                    key={choco.name}
+                    className={`p-4 rounded-xl border cursor-pointer transition-all flex justify-between items-center ${
+                      isSelected 
+                        ? 'border-amber-400 bg-amber-500/10 shadow-md shadow-amber-500/10' 
+                        : 'border-white/[0.08] bg-white/[0.02] hover:border-amber-500/30'
+                    }`}
+                    onClick={() => toggleChocolate(choco, maxSelection)}
+                  >
+                    <span className="font-semibold text-sm">
+                      {choco.name} {choco.extraPrice > 0 && <span className="text-amber-400/80 font-mono text-xs ml-1">(+₹{choco.extraPrice})</span>}
+                    </span>
+                    {isSelected && <CheckCircle2 className="w-5 h-5 text-amber-400" />}
+                  </div>
+                );
+              });
+            })()}
+          </div>
+
+          <div className="pt-2">
+            <Button 
+              className="w-full h-12 bg-amber-500 hover:bg-amber-400 text-black font-extrabold rounded-xl shadow-lg shadow-amber-500/20 disabled:opacity-50"
+              disabled={(() => {
+                const max = selectedProduct?.maxSelections || 1;
+                return selectedChocolates.length !== max;
+              })()}
+              onClick={handleCustomizationSubmit}
+            >
+              ADD TO CART
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

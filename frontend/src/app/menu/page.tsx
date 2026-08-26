@@ -37,8 +37,13 @@ export default function MenuPage() {
   // Form states
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
-  const [category, setCategory] = useState('Waffles');
+  const [category, setCategory] = useState('MINION WAFFLES');
   const [available, setAvailable] = useState(true);
+  
+  // Customization states
+  const [isCustomizable, setIsCustomizable] = useState(false);
+  const [maxSelections, setMaxSelections] = useState(1);
+  const [customizationOptions, setCustomizationOptions] = useState<{name: string, extraPrice: number}[]>([]);
 
   useEffect(() => {
     fetchProducts();
@@ -58,7 +63,7 @@ export default function MenuPage() {
   const handleToggleAvailability = async (product: Product) => {
     try {
       const updated = !product.available;
-      await api.put(`/products/${product._id}`, { ...product, available: updated });
+      await api.patch(`/products/${product._id}`, { ...product, available: updated });
       setProducts(prev => prev.map(p => p._id === product._id ? { ...p, available: updated } : p));
       toast.success(`${product.name} is now ${updated ? 'Available' : 'Sold Out'}`);
     } catch (err) {
@@ -75,11 +80,14 @@ export default function MenuPage() {
         name,
         price: parseFloat(price),
         category,
-        available
+        available,
+        isCustomizable,
+        maxSelections: Number(maxSelections),
+        customizationOptions: isCustomizable ? customizationOptions.filter(c => c.name.trim()) : []
       };
 
       if (editingProduct) {
-        const res = await api.put(`/products/${editingProduct._id}`, payload);
+        const res = await api.patch(`/products/${editingProduct._id}`, payload);
         setProducts(prev => prev.map(p => p._id === editingProduct._id ? res.data : p));
         toast.success('Product updated successfully');
       } else {
@@ -109,8 +117,11 @@ export default function MenuPage() {
     setEditingProduct(null);
     setName('');
     setPrice('');
-    setCategory('Waffles');
+    setCategory('MINION WAFFLES');
     setAvailable(true);
+    setIsCustomizable(false);
+    setMaxSelections(1);
+    setCustomizationOptions([]);
     setIsAddOpen(true);
   };
 
@@ -120,6 +131,9 @@ export default function MenuPage() {
     setPrice(String(product.price));
     setCategory(product.category);
     setAvailable(product.available);
+    setIsCustomizable(product.isCustomizable || false);
+    setMaxSelections(product.maxSelections || 1);
+    setCustomizationOptions(product.customizationOptions || []);
     setIsAddOpen(true);
   };
 
@@ -291,14 +305,26 @@ export default function MenuPage() {
               <label className="text-xs font-semibold text-slate-400 uppercase tracking-widest block mb-1.5">
                 Category
               </label>
-              <Input 
-                type="text" 
-                placeholder="e.g. Waffles, Beverages, Shakes" 
+              <select
                 required
-                className="bg-white/[0.04] border-white/[0.08] text-white rounded-xl h-11 focus-visible:ring-amber-500/50"
+                className="w-full bg-white/[0.04] border border-white/[0.08] text-white rounded-xl h-11 px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/50 appearance-none cursor-pointer"
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
-              />
+              >
+                {[
+                  'MINION WAFFLES',
+                  'SIGNATURE WAFFLES',
+                  'STICK WAFFLES',
+                  'WAFFLE PIZZA',
+                  'HERO SECTION',
+                  'BOBA MOCKTAILS',
+                  'ADD-ONS'
+                ].map(cat => (
+                  <option key={cat} value={cat} className="bg-[#0c0c12] text-white">
+                    {cat}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div>
@@ -315,6 +341,77 @@ export default function MenuPage() {
                 onChange={(e) => setPrice(e.target.value)}
               />
             </div>
+
+            <div className="flex items-center justify-between py-2 border-t border-white/[0.06] pt-4 mt-2">
+              <span className="text-sm font-semibold text-slate-300">Allow Customization</span>
+              <Switch checked={isCustomizable} onCheckedChange={setIsCustomizable} />
+            </div>
+
+            {isCustomizable && (
+              <div className="space-y-4 p-4 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+                <div>
+                  <label className="text-xs font-semibold text-amber-400 uppercase tracking-widest block mb-1.5">
+                    Selections Required
+                  </label>
+                  <Input 
+                    type="number" 
+                    min="1"
+                    required={isCustomizable}
+                    className="bg-[#0c0c12] border-white/[0.08] text-white rounded-xl h-11 focus-visible:ring-amber-500/50"
+                    value={maxSelections}
+                    onChange={(e) => setMaxSelections(Number(e.target.value))}
+                  />
+                </div>
+                <div className="space-y-3 mt-4">
+                  <label className="text-xs font-semibold text-amber-400 uppercase tracking-widest block mb-1.5">
+                    Options & Extra Prices
+                  </label>
+                  {customizationOptions.map((opt, idx) => (
+                    <div key={idx} className="flex gap-2 items-center">
+                      <Input 
+                        placeholder="Option Name"
+                        required
+                        className="bg-[#0c0c12] border-white/[0.08] text-white rounded-xl h-11 flex-1 focus-visible:ring-amber-500/50"
+                        value={opt.name}
+                        onChange={(e) => {
+                          const newOpts = [...customizationOptions];
+                          newOpts[idx].name = e.target.value;
+                          setCustomizationOptions(newOpts);
+                        }}
+                      />
+                      <div className="relative w-24">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs">₹</span>
+                        <Input 
+                          type="number"
+                          placeholder="0"
+                          className="bg-[#0c0c12] border-white/[0.08] text-white rounded-xl h-11 pl-7 focus-visible:ring-amber-500/50"
+                          value={opt.extraPrice}
+                          onChange={(e) => {
+                            const newOpts = [...customizationOptions];
+                            newOpts[idx].extraPrice = Number(e.target.value);
+                            setCustomizationOptions(newOpts);
+                          }}
+                        />
+                      </div>
+                      <button 
+                        type="button" 
+                        onClick={() => setCustomizationOptions(customizationOptions.filter((_, i) => i !== idx))}
+                        className="w-11 h-11 shrink-0 rounded-xl bg-red-500/10 text-red-400 flex items-center justify-center hover:bg-red-500/20 transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                  <button 
+                    type="button"
+                    onClick={() => setCustomizationOptions([...customizationOptions, { name: '', extraPrice: 0 }])}
+                    className="flex items-center gap-2 text-amber-400 text-xs font-bold hover:text-amber-300 mt-2 px-2 h-10 bg-amber-500/10 rounded-xl justify-center border border-amber-500/20 w-full transition-all hover:bg-amber-500/20"
+                  >
+                    <Plus className="w-4 h-4" /> ADD OPTION
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div className="flex items-center justify-between py-2 border-t border-white/[0.06] pt-4">
               <span className="text-sm font-semibold text-slate-300">Item Availability</span>
