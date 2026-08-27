@@ -300,15 +300,34 @@ router.post('/email-invoice', async (req, res) => {
       return res.status(500).json({ error: 'Email service is not configured on the server. Please check .env settings.' });
     }
 
+    // Manually force IPv4 resolution since Render struggles with IPv6
+    const dns = require('dns');
+    const { promisify } = require('util');
+    const resolve4 = promisify(dns.resolve4);
+    
+    let smtpHost = 'smtp.gmail.com';
+    try {
+      const ips = await resolve4('smtp.gmail.com');
+      if (ips && ips.length > 0) {
+        smtpHost = ips[0];
+      }
+    } catch (e) {
+      console.error('Failed to resolve smtp.gmail.com IPv4', e);
+    }
+
     const transporter = nodemailer.createTransport({
-      host: 'smtp.gmail.com',
+      host: smtpHost,
       port: 465,
       secure: true, // Use SSL
       auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS?.replace(/\s+/g, '') // Strip spaces from App Password
       },
-      connectionTimeout: 10000, // Fail fast if Gmail can't be reached
+      tls: {
+        servername: 'smtp.gmail.com', // Required when connecting via IP address
+        rejectUnauthorized: false
+      },
+      connectionTimeout: 10000,
       socketTimeout: 15000
     });
 
