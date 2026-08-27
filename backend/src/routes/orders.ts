@@ -314,7 +314,7 @@ router.post('/email-invoice', async (req, res) => {
           <div style="max-width: 600px; margin: 0 auto; background-color: #111111; border: 1px solid #333333; border-radius: 12px; overflow: hidden;">
             
             <div style="text-align: center; padding: 40px 20px; border-bottom: 1px solid #222222;">
-              <img src="cid:wafflelogo" alt="Waffle Circle Logo" style="width: 80px; height: 80px; border-radius: 50%; border: 2px solid #E6B462; margin-bottom: 20px; display: inline-block; object-fit: cover;"/>
+              <img src="https://raw.githubusercontent.com/soumyajitnandi0/ordering-sys/main/frontend/public/logo.jpeg" alt="Waffle Circle Logo" style="width: 80px; height: 80px; border-radius: 50%; border: 2px solid #E6B462; margin-bottom: 20px; display: inline-block; object-fit: cover;"/>
               <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 900; letter-spacing: 4px;">WAFFLE CIRCLE</h1>
               <p style="color: #E6B462; margin: 10px 0 0 0; font-size: 12px; text-transform: uppercase; letter-spacing: 3px; font-weight: 600;">Premium Waffle & Mocktail Counter</p>
             </div>
@@ -347,17 +347,12 @@ router.post('/email-invoice', async (req, res) => {
           filename: `WaffleCircle_Receipt_${tokenNumber}.pdf`,
           content: pdfBuffer,
           contentType: 'application/pdf'
-        },
-        {
-          filename: 'logo.jpeg',
-          path: path.join(process.cwd(), '../frontend/public/logo.jpeg'),
-          cid: 'wafflelogo'
         }
       ]
     };
 
-    transporter.sendMail(mailOptions).catch(err => console.error('Background Email Error:', err));
-    res.json({ message: 'Email queued for sending' });
+    await transporter.sendMail(mailOptions);
+    res.json({ message: 'Email sent successfully' });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
