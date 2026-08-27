@@ -13,8 +13,7 @@ import {
   Mail,
   Send
 } from 'lucide-react';
-import { toJpeg } from 'html-to-image';
-import { jsPDF } from 'jspdf';
+
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
@@ -95,32 +94,23 @@ export default function InvoiceGeneratorPage() {
 
       // Temporarily make it opaque for the capture
       element.classList.remove('opacity-0');
-      const imgData = await toJpeg(element, { quality: 0.85, pixelRatio: 1.0, cacheBust: true });
-      element.classList.add('opacity-0');
+      // @ts-ignore
+      const html2pdf = (await import('html2pdf.js')).default;
       
+      const opt = {
+        margin:       [10, 10, 10, 10], // top, left, bottom, right
+        filename:     `Invoice_${order.tokenNumber}.pdf`,
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { scale: 2, useCORS: true, logging: false },
+        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        pagebreak:    { mode: ['css', 'legacy'] } // Respects page-break-inside: avoid
+      };
+
+      const pdfBase64 = await html2pdf().set(opt).from(element).outputPdf('datauristring');
+      
+      element.classList.add('opacity-0');
       // Restore background
       element.style.backgroundImage = originalBg;
-      
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const imgHeight = (element.offsetHeight * pdfWidth) / element.offsetWidth;
-      
-      let heightLeft = imgHeight;
-      let position = 0;
-
-      // Add first page
-      pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, imgHeight);
-      heightLeft -= pageHeight;
-
-      // Add subsequent pages if the invoice is longer than one A4 page
-      while (heightLeft > 0) {
-        position -= pageHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, imgHeight);
-        heightLeft -= pageHeight;
-      }
-      const pdfBase64 = pdf.output('datauristring');
       
       const res = await fetch('/api/email', {
         method: 'POST',
