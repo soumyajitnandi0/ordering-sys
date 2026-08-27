@@ -108,12 +108,19 @@ export default function InvoiceGeneratorPage() {
       pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
       const pdfBase64 = pdf.output('datauristring');
       
-      await api.post('/orders/email-invoice', {
-        email: emailInput,
-        orderId: order._id,
-        tokenNumber: order.tokenNumber,
-        pdfBase64
+      const res = await fetch('/api/email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: emailInput,
+          orderId: order._id,
+          tokenNumber: order.tokenNumber,
+          pdfBase64
+        })
       });
+      
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to send email');
       
       toast.success(`Invoice sent successfully to ${emailInput}`);
       setEmailInput('');
