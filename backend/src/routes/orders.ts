@@ -317,8 +317,9 @@ router.post('/email-invoice', async (req, res) => {
 
     const transporter = nodemailer.createTransport({
       host: smtpHost,
-      port: 465,
-      secure: true, // Use SSL
+      port: 587, // Try STARTTLS on 587 if 465 is blocked by Google/Render
+      secure: false, // Must be false for 587
+      requireTLS: true,
       auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS?.replace(/\s+/g, '') // Strip spaces from App Password
