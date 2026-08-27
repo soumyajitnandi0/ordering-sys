@@ -27,7 +27,7 @@ app.set('io', io);
 app.use(helmet());
 const allowedOrigin = process.env.CLIENT_URL ? process.env.CLIENT_URL.replace(/\/$/, '') : '*';
 app.use(cors({ origin: allowedOrigin }));
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 
 // Routes will be imported and used here
 import authRoutes from './routes/auth';

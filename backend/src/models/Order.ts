@@ -16,6 +16,8 @@ export interface IOrder extends Document {
   customerPhone?: string;
   items: IOrderItem[];
   subtotal: number;
+  discountPercentage?: number;
+  discountAmount?: number;
   total: number;
   status: 'NEW' | 'PREPARING' | 'READY' | 'DELIVERED' | 'CANCELLED';
   createdAt: Date;
@@ -46,6 +48,8 @@ const OrderSchema: Schema = new Schema(
     customerPhone: { type: String },
     items: { type: [OrderItemSchema], required: true },
     subtotal: { type: Number, required: true },
+    discountPercentage: { type: Number, default: 0 },
+    discountAmount: { type: Number, default: 0 },
     total: { type: Number, required: true },
     status: {
       type: String,

@@ -22,10 +22,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark">
-      <body className={`${plusJakartaSans.className} bg-[#070709] text-foreground antialiased h-screen flex overflow-hidden selection:bg-amber-500/30 selection:text-amber-200 relative`}>
+      <body className={`${plusJakartaSans.className} bg-[#070709] text-foreground antialiased h-screen flex overflow-hidden selection:bg-amber-500/30 selection:text-amber-200 relative print:h-auto print:overflow-visible print:block`}>
         {/* Ambient background glows */}
-        <div className="fixed top-0 left-1/4 w-[600px] h-[600px] bg-amber-500/5 rounded-full blur-[140px] pointer-events-none z-0" />
-        <div className="fixed bottom-0 right-1/4 w-[500px] h-[500px] bg-amber-600/5 rounded-full blur-[160px] pointer-events-none z-0" />
+        <div className="fixed top-0 left-1/4 w-[600px] h-[600px] bg-amber-500/5 rounded-full blur-[140px] pointer-events-none z-0 print:hidden" />
+        <div className="fixed bottom-0 right-1/4 w-[500px] h-[500px] bg-amber-600/5 rounded-full blur-[160px] pointer-events-none z-0 print:hidden" />
 
         <ClientLayoutWrapper>
           {children}

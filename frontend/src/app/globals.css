@@ -181,3 +181,13 @@
     background: rgba(230, 180, 98, 0.4);
   }
 }
+
+@media print {
+  @page {
+    margin: 0;
+  }
+  body {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

@@ -3,12 +3,14 @@ import Order from '../models/Order';
 import Product from '../models/Product';
 import { getNextToken } from '../services/token';
 import { Server } from 'socket.io';
+import nodemailer from 'nodemailer';
+import path from 'path';
 
 const router = Router();
 
 router.post('/', async (req, res) => {
   try {
-    const { items, customerPhone, paymentMethod = 'UPI' } = req.body;
+    const { items, customerPhone, paymentMethod = 'UPI', discountPercentage = 0 } = req.body;
     if (!items || !items.length) {
       return res.status(400).json({ error: 'Order must contain items' });
     }
@@ -33,7 +35,14 @@ router.post('/', async (req, res) => {
           extraPriceSum += matchingOption.extraPrice || 0;
           validCustomizations.push({ name: matchingOption.name, extraPrice: matchingOption.extraPrice || 0 });
         } else {
-          validCustomizations.push({ name: custName, extraPrice: 0 });
+          // Check if it's an optional ADD-ON product
+          const addOnProduct = await Product.findOne({ name: custName, category: 'ADD-ONS' });
+          if (addOnProduct) {
+            extraPriceSum += addOnProduct.price;
+            validCustomizations.push({ name: custName, extraPrice: addOnProduct.price });
+          } else {
+            validCustomizations.push({ name: custName, extraPrice: 0 });
+          }
         }
       }
 
@@ -53,6 +62,9 @@ router.post('/', async (req, res) => {
 
     const { tokenNumber, tokenDate } = await getNextToken();
 
+    const discountAmount = Math.round(subtotal * (discountPercentage / 100));
+    const total = subtotal - discountAmount;
+
     const order = new Order({
       tokenNumber,
       tokenDate,
@@ -60,7 +72,9 @@ router.post('/', async (req, res) => {
       customerPhone,
       items: orderItems,
       subtotal,
-      total: subtotal,
+      discountPercentage,
+      discountAmount,
+      total,
       status: 'NEW',
     });
 
@@ -218,17 +232,8 @@ router.get('/analytics', async (req, res) => {
 
 router.get('/token/:token', async (req, res) => {
   try {
-    const now = new Date();
-    const options: Intl.DateTimeFormatOptions = { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' };
-    const dateFormatter = new Intl.DateTimeFormat('en-CA', options);
-    const dateParts = dateFormatter.formatToParts(now);
-    const year = dateParts.find((p) => p.type === 'year')?.value;
-    const month = dateParts.find((p) => p.type === 'month')?.value;
-    const day = dateParts.find((p) => p.type === 'day')?.value;
-    const today = `${year}-${month}-${day}`;
-
-    const order = await Order.findOne({ tokenNumber: Number(req.params.token), tokenDate: today });
-    if (!order) return res.status(404).json({ error: 'Order not found for today' });
+    const order = await Order.findOne({ tokenNumber: Number(req.params.token) }).sort({ createdAt: -1 });
+    if (!order) return res.status(404).json({ error: 'Order not found' });
     res.json(order);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -273,6 +278,85 @@ router.patch('/:id/status', async (req, res) => {
     }
 
     res.json(order);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/email-invoice', async (req, res) => {
+  try {
+    const { email, orderId, pdfBase64, tokenNumber } = req.body;
+    if (!email || !pdfBase64) {
+      return res.status(400).json({ error: 'Email and PDF data are required' });
+    }
+
+    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+      return res.status(500).json({ error: 'Email service is not configured on the server. Please check .env settings.' });
+    }
+
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS
+      }
+    });
+
+    const pdfBuffer = Buffer.from(pdfBase64.replace(/^data:application\/pdf;filename=generated\.pdf;base64,/, ''), 'base64');
+
+    const mailOptions = {
+      from: `"Waffle Circle" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: `Your Receipt from Waffle Circle (Order #${String(tokenNumber).padStart(3, '0')})`,
+      html: `
+        <div style="background-color: #000000; padding: 40px 20px; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;">
+          <div style="max-width: 600px; margin: 0 auto; background-color: #111111; border: 1px solid #333333; border-radius: 12px; overflow: hidden;">
+            
+            <div style="text-align: center; padding: 40px 20px; border-bottom: 1px solid #222222;">
+              <img src="cid:wafflelogo" alt="Waffle Circle Logo" style="width: 80px; height: 80px; border-radius: 50%; border: 2px solid #E6B462; margin-bottom: 20px; display: inline-block; object-fit: cover;"/>
+              <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 900; letter-spacing: 4px;">WAFFLE CIRCLE</h1>
+              <p style="color: #E6B462; margin: 10px 0 0 0; font-size: 12px; text-transform: uppercase; letter-spacing: 3px; font-weight: 600;">Premium Waffle & Mocktail Counter</p>
+            </div>
+            
+            <div style="padding: 40px 30px; color: #dddddd; line-height: 1.8; font-size: 15px;">
+              <h2 style="color: #E6B462; margin-top: 0; font-weight: 400; font-size: 22px; letter-spacing: 1px;">Thank You for Your Visit</h2>
+              <p>Dear Guest,</p>
+              <p>Thank you for choosing Waffle Circle. It was our absolute privilege to serve you. We are deeply committed to delivering an exceptional culinary experience, and we sincerely hope you enjoyed our premium offerings.</p>
+              <p>For your records, please find attached your receipt for <strong>Order #${String(tokenNumber).padStart(3, '0')}</strong>.</p>
+              <p>We eagerly look forward to welcoming you back soon.</p>
+              
+              <div style="margin-top: 40px; padding-top: 20px; border-top: 1px dashed #333333;">
+                <p style="margin: 0; color: #aaaaaa; font-size: 14px;">Warmest regards,</p>
+                <p style="margin: 5px 0 0 0; color: #ffffff; font-weight: bold; font-size: 16px; letter-spacing: 1px;">Waffle Circle Management</p>
+              </div>
+            </div>
+            
+            <div style="background-color: #0a0a0a; padding: 20px; text-align: center;">
+              <p style="margin: 0; color: #666666; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">Join our community</p>
+              <p style="margin: 8px 0 0 0;">
+                <a href="https://instagram.com/waffle.circle" style="color: #E6B462; text-decoration: none; font-weight: bold; font-size: 13px; letter-spacing: 1px;">INSTAGRAM: @WAFFLE.CIRCLE</a>
+              </p>
+            </div>
+            
+          </div>
+        </div>
+      `,
+      attachments: [
+        {
+          filename: `WaffleCircle_Receipt_${tokenNumber}.pdf`,
+          content: pdfBuffer,
+          contentType: 'application/pdf'
+        },
+        {
+          filename: 'logo.jpeg',
+          path: path.join(process.cwd(), '../frontend/public/logo.jpeg'),
+          cid: 'wafflelogo'
+        }
+      ]
+    };
+
+    await transporter.sendMail(mailOptions);
+    res.json({ message: 'Email sent successfully' });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

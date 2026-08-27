@@ -87,12 +87,22 @@ export default function SettingsPage() {
                 <p className="text-xs text-slate-400">Details displayed on customer digital receipts and kitchen tickets</p>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
                 <div>
                   <Label className="text-xs font-semibold text-slate-400 uppercase tracking-widest block mb-2">Outlet / Store Name</Label>
                   <Input 
                     value={settings.storeName} 
                     onChange={(e) => updateSettings({ storeName: e.target.value })}
+                    className="bg-white/[0.04] border-white/[0.08] text-white rounded-xl h-11 focus-visible:ring-amber-500/50" 
+                  />
+                </div>
+
+                <div>
+                  <Label className="text-xs font-semibold text-slate-400 uppercase tracking-widest block mb-2">Event Name</Label>
+                  <Input 
+                    value={settings.eventName || ''} 
+                    onChange={(e) => updateSettings({ eventName: e.target.value })}
+                    placeholder="e.g. Comic Con 2026"
                     className="bg-white/[0.04] border-white/[0.08] text-white rounded-xl h-11 focus-visible:ring-amber-500/50" 
                   />
                 </div>
@@ -221,13 +231,7 @@ export default function SettingsPage() {
                 <p className="text-xs text-slate-400">Configure order token generation and reset intervals</p>
               </div>
 
-              <div className="flex items-center justify-between py-3 border-b border-white/[0.06]">
-                <div>
-                  <p className="text-sm font-semibold text-white">Daily Midnight Token Reset</p>
-                  <p className="text-xs text-slate-400">Automatically reset order tokens to #001 every day at 12:00 AM</p>
-                </div>
-                <Switch checked={settings.dailyReset} onCheckedChange={(val) => updateSettings({ dailyReset: val })} />
-              </div>
+              {/* Token Reset Setting Removed - Now uses global all-time sequence */}
 
               <div className="flex items-center justify-between py-3 border-b border-white/[0.06]">
                 <div>

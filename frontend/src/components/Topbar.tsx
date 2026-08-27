@@ -43,7 +43,7 @@ export default function Topbar() {
   const page = getPageTitle();
 
   return (
-    <header className="h-20 flex items-center justify-between px-8 border-b border-white/[0.08] bg-[#070709]/80 backdrop-blur-xl z-40 sticky top-0">
+    <header className="print:hidden h-20 flex items-center justify-between px-8 border-b border-white/[0.08] bg-[#070709]/80 backdrop-blur-xl z-40 sticky top-0">
       {/* Page Title & Breadcrumb */}
       <div className="flex flex-col justify-center">
         <div className="flex items-center gap-2">

@@ -42,6 +42,7 @@ export interface Order {
 
 export interface AppSettings {
   storeName: string;
+  eventName: string;
   wahaAutoNotify: boolean;
   dailyReset: boolean;
   tokenDigits: number;
@@ -70,6 +71,7 @@ export const useStore = create<AppState>()(
       token: null,
       settings: {
         storeName: 'Waffle Circle Flagship',
+        eventName: '',
         wahaAutoNotify: true,
         dailyReset: true,
         tokenDigits: 3,

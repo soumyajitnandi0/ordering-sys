@@ -33,13 +33,13 @@ import {
 } from "@/components/ui/dialog";
 
 const categoryIcons: Record<string, string> = {
-  'All': '✨',
-  'Minion Waffles': '🧇',
-  'Signature Waffles': '✨',
-  'Stick Waffles': '🍢',
-  'Hero Treats': '🍓',
-  'Waffle Pizza': '🍕',
-  'Add-ons': '➕'
+  'MINION WAFFLES': '🧇',
+  'SIGNATURE WAFFLES': '✨',
+  'STICK WAFFLES': '🍢',
+  'HERO SECTION': '🍓',
+  'WAFFLE PIZZA': '🍕',
+  'ADD-ONS': '➕',
+  'BOBA MOCKTAILS': '🍹'
 };
 
 const getProductImage = (name: string, category: string) => {
@@ -67,7 +67,7 @@ const getProductImage = (name: string, category: string) => {
 export default function POSPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
-  const [activeCategory, setActiveCategory] = useState<string>('All');
+  const [activeCategory, setActiveCategory] = useState<string>('MINION WAFFLES');
   const [searchQuery, setSearchQuery] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -76,10 +76,12 @@ export default function POSPage() {
   const [searchToken, setSearchToken] = useState('');
   const [searchedOrder, setSearchedOrder] = useState<any>(null);
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'UPI'>('UPI');
+  const [discountPercentage, setDiscountPercentage] = useState<number>(0);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isCustomizationOpen, setIsCustomizationOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedChocolates, setSelectedChocolates] = useState<any[]>([]);
+  const [selectedAddons, setSelectedAddons] = useState<(Product & { variant?: string })[]>([]);
   
   const searchInputRef = useRef<HTMLInputElement>(null);
   const { cart, addToCart, removeFromCart, updateQuantity, clearCart, cartTotal, settings } = useStore();
@@ -102,7 +104,30 @@ export default function POSPage() {
       const res = await api.get('/products');
       setProducts(res.data);
       const uniqueCats = Array.from(new Set(res.data.map((p: Product) => p.category))) as string[];
-      setCategories(['All', ...uniqueCats]);
+      
+      const desiredOrder = [
+        'MINION WAFFLES', 
+        'SIGNATURE WAFFLES', 
+        'STICK WAFFLES', 
+        'HERO SECTION', 
+        'WAFFLE PIZZA', 
+        'ADD-ONS', 
+        'BOBA MOCKTAILS'
+      ];
+
+      const sortedCats = uniqueCats.sort((a, b) => {
+        const indexA = desiredOrder.indexOf(a.toUpperCase());
+        const indexB = desiredOrder.indexOf(b.toUpperCase());
+        if (indexA === -1 && indexB === -1) return a.localeCompare(b);
+        if (indexA === -1) return 1;
+        if (indexB === -1) return -1;
+        return indexA - indexB;
+      });
+
+      setCategories(sortedCats);
+      if (sortedCats.length > 0 && !sortedCats.includes('MINION WAFFLES')) {
+        setActiveCategory(sortedCats[0]);
+      }
     } catch (err) {
       console.error('Error fetching products', err);
     }
@@ -122,12 +147,14 @@ export default function POSPage() {
       const res = await api.post('/orders', { 
         items,
         customerPhone: trimmedPhone || undefined,
-        paymentMethod
+        paymentMethod,
+        discountPercentage
       });
 
       setLatestToken(res.data.tokenNumber);
       clearCart();
       setCustomerPhone('');
+      setDiscountPercentage(0);
       
       toast.success('Order Generated Successfully', {
         description: `Token #${String(res.data.tokenNumber).padStart(3, '0')} sent to kitchen${trimmedPhone ? ' & WhatsApp notified' : ''}.`,
@@ -167,7 +194,7 @@ export default function POSPage() {
   };
 
   const filteredProducts = products.filter(p => {
-    const matchesCat = activeCategory === 'All' || p.category === activeCategory;
+    const matchesCat = p.category === activeCategory;
     const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
                           p.category.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesCat && matchesSearch;
@@ -179,9 +206,11 @@ export default function POSPage() {
 
   const handleProductClick = (product: Product) => {
     if (!product.available) return;
-    if (product.isCustomizable && product.customizationOptions && product.customizationOptions.length > 0) {
+    const isMainCategory = ['MINION WAFFLES', 'SIGNATURE WAFFLES', 'STICK WAFFLES', 'WAFFLE PIZZA', 'HERO SECTION'].includes(product.category);
+    if ((product.isCustomizable && product.customizationOptions && product.customizationOptions.length > 0) || isMainCategory) {
       setSelectedProduct(product);
       setSelectedChocolates([]);
+      setSelectedAddons([]);
       setIsCustomizationOpen(true);
     } else {
       addToCart(product);
@@ -196,12 +225,38 @@ export default function POSPage() {
     });
   };
 
+  const toggleAddon = (addon: any, variant?: string) => {
+    setSelectedAddons(prev => {
+      const isSelected = prev.some(a => a._id === addon._id);
+      
+      if (isSelected && !variant) {
+        return prev.filter(a => a._id !== addon._id);
+      } else if (isSelected && variant) {
+        return prev.map(a => a._id === addon._id ? { ...a, variant } : a);
+      } else {
+        let defaultVariant = undefined;
+        const name = addon.name.toLowerCase();
+        if (name.includes('chips')) defaultVariant = 'Dark';
+        if (name.includes('extra')) defaultVariant = 'Dark';
+        return [...prev, { ...addon, variant: variant || defaultVariant }];
+      }
+    });
+  };
+
   const handleCustomizationSubmit = () => {
     if (!selectedProduct) return;
-    addToCart(selectedProduct, selectedChocolates);
+    const allCustomizations = [
+      ...selectedChocolates,
+      ...selectedAddons.map(a => ({ 
+        name: a.variant ? `${a.name} (${a.variant})` : a.name, 
+        extraPrice: a.price 
+      }))
+    ];
+    addToCart(selectedProduct, allCustomizations);
     setIsCustomizationOpen(false);
     setSelectedProduct(null);
     setSelectedChocolates([]);
+    setSelectedAddons([]);
   };
 
   const getFirstCartItemId = (productId: string) => {
@@ -210,7 +265,6 @@ export default function POSPage() {
   };
 
   const getCategoryCount = (cat: string) => {
-    if (cat === 'All') return products.length;
     return products.filter(p => p.category === cat).length;
   };
 
@@ -646,20 +700,47 @@ export default function POSPage() {
           </div>
 
           <div className="space-y-2 mb-5">
-            <div className="flex justify-between text-xs text-slate-400">
+            <div className="flex justify-between text-xs text-slate-400 items-center">
               <span>Subtotal</span>
               <span className="text-white font-mono">₹{cartTotal().toFixed(0)}</span>
             </div>
-            <div className="flex justify-between text-xs text-slate-400">
+            
+            <div className="flex justify-between text-xs text-slate-400 items-center">
+              <span>Discount (%)</span>
+              <div className="w-16">
+                <Input
+                  type="number"
+                  min="0"
+                  max="100"
+                  className="bg-black/40 border-amber-500/30 text-amber-400 placeholder:text-amber-500/30 rounded-lg px-2 h-7 text-xs focus-visible:ring-amber-400 font-mono text-right [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  value={discountPercentage || ''}
+                  onChange={(e) => {
+                    const val = Number(e.target.value);
+                    setDiscountPercentage(val > 100 ? 100 : val);
+                  }}
+                  placeholder="0"
+                />
+              </div>
+            </div>
+            
+            {discountPercentage > 0 && (
+              <div className="flex justify-between text-xs text-amber-400/90 items-center">
+                <span>Discount Amount</span>
+                <span className="font-mono">-₹{Math.round(cartTotal() * (discountPercentage / 100))}</span>
+              </div>
+            )}
+
+            <div className="flex justify-between text-xs text-slate-400 items-center">
               <span>GST / Taxes (0%)</span>
               <span className="text-emerald-400 font-mono">₹0</span>
             </div>
+            
             <div className="h-px bg-white/[0.08] my-3" />
             <div className="flex justify-between items-end">
               <div>
                 <span className="text-xs text-slate-400 uppercase tracking-widest font-semibold">Total Amount</span>
                 <p className="text-2xl font-black text-amber-400 font-mono leading-none mt-1">
-                  ₹{cartTotal().toFixed(0)}
+                  ₹{(cartTotal() - Math.round(cartTotal() * (discountPercentage / 100))).toFixed(0)}
                 </p>
               </div>
               <div className="flex bg-white/[0.04] p-1 rounded-lg border border-white/[0.06]">
@@ -797,45 +878,120 @@ export default function POSPage() {
             <DialogTitle className="text-xl font-bold text-white mb-1">
               Customize {selectedProduct?.name}
             </DialogTitle>
-            <p className="text-xs text-amber-400/80 uppercase tracking-widest font-bold">
-              Select {selectedProduct?.maxSelections || 1} Option{(selectedProduct?.maxSelections || 1) > 1 ? 's' : ''}
-            </p>
+            {selectedProduct?.isCustomizable && selectedProduct?.customizationOptions && selectedProduct.customizationOptions.length > 0 && (
+              <p className="text-xs text-amber-400/80 uppercase tracking-widest font-bold">
+                Select {selectedProduct?.maxSelections || 1} Option{(selectedProduct?.maxSelections || 1) > 1 ? 's' : ''}
+              </p>
+            )}
           </DialogHeader>
 
-          <div className="py-4 space-y-3">
-            {(() => {
-              const options = selectedProduct?.customizationOptions || [];
-              const maxSelection = selectedProduct?.maxSelections || 1;
-              
-              return options.map((choco: any) => {
-                const isSelected = selectedChocolates.some(c => c.name === choco.name);
-                
-                return (
-                  <div 
-                    key={choco.name}
-                    className={`p-4 rounded-xl border cursor-pointer transition-all flex justify-between items-center ${
-                      isSelected 
-                        ? 'border-amber-400 bg-amber-500/10 shadow-md shadow-amber-500/10' 
-                        : 'border-white/[0.08] bg-white/[0.02] hover:border-amber-500/30'
-                    }`}
-                    onClick={() => toggleChocolate(choco, maxSelection)}
-                  >
-                    <span className="font-semibold text-sm">
-                      {choco.name} {choco.extraPrice > 0 && <span className="text-amber-400/80 font-mono text-xs ml-1">(+₹{choco.extraPrice})</span>}
-                    </span>
-                    {isSelected && <CheckCircle2 className="w-5 h-5 text-amber-400" />}
-                  </div>
-                );
-              });
-            })()}
+          <div className="py-4 space-y-6 max-h-[50vh] overflow-y-auto custom-scrollbar">
+            {/* Base Product Customizations */}
+            {selectedProduct?.isCustomizable && selectedProduct?.customizationOptions && selectedProduct.customizationOptions.length > 0 && (
+              <div className="space-y-3">
+                {selectedProduct.customizationOptions.map((choco: any) => {
+                  const isSelected = selectedChocolates.some(c => c.name === choco.name);
+                  const maxSelection = selectedProduct?.maxSelections || 1;
+                  return (
+                    <div 
+                      key={choco.name}
+                      className={`p-4 rounded-xl border cursor-pointer transition-all flex justify-between items-center ${
+                        isSelected 
+                          ? 'border-amber-400 bg-amber-500/10 shadow-md shadow-amber-500/10' 
+                          : 'border-white/[0.08] bg-white/[0.02] hover:border-amber-500/30'
+                      }`}
+                      onClick={() => toggleChocolate(choco, maxSelection)}
+                    >
+                      <span className="font-semibold text-sm">
+                        {choco.name} {choco.extraPrice > 0 && <span className="text-amber-400/80 font-mono text-xs ml-1">(+₹{choco.extraPrice})</span>}
+                      </span>
+                      {isSelected && <CheckCircle2 className="w-5 h-5 text-amber-400" />}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Optional Add-ons List */}
+            {['MINION WAFFLES', 'SIGNATURE WAFFLES', 'STICK WAFFLES', 'WAFFLE PIZZA', 'HERO SECTION'].includes(selectedProduct?.category || '') && (
+              <div className="space-y-3">
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Optional Add-ons</h4>
+                {products.filter(p => p.category === 'ADD-ONS').map((addon) => {
+                  const isSelected = selectedAddons.some(a => a._id === addon._id);
+                  const selectedVariant = selectedAddons.find(a => a._id === addon._id)?.variant;
+                  
+                  const isChocoChips = addon.name.toLowerCase().includes('chips');
+                  const isExtraChoc = addon.name.toLowerCase().includes('extra');
+
+                  return (
+                    <div key={addon._id} className="space-y-2">
+                      <div 
+                        className={`p-4 rounded-xl border cursor-pointer transition-all flex justify-between items-center ${
+                          isSelected 
+                            ? 'border-amber-400 bg-amber-500/10 shadow-md shadow-amber-500/10' 
+                            : 'border-white/[0.08] bg-white/[0.02] hover:border-amber-500/30'
+                        }`}
+                        onClick={() => toggleAddon(addon)}
+                      >
+                        <span className="font-semibold text-sm">
+                          {addon.name} <span className="text-amber-400/80 font-mono text-xs ml-1">(+₹{addon.price})</span>
+                        </span>
+                        {isSelected && <CheckCircle2 className="w-5 h-5 text-amber-400" />}
+                      </div>
+
+                      {/* Variant Sub-menu: Choco Chips */}
+                      {isSelected && isChocoChips && (
+                        <div className="flex gap-2 pl-4 animate-in slide-in-from-top-2 fade-in duration-200">
+                          {['Dark', 'White', 'Twin'].map(v => (
+                            <button
+                              key={v}
+                              onClick={(e) => { e.stopPropagation(); toggleAddon(addon, v); }}
+                              className={`px-3 py-1.5 text-xs rounded-lg border transition-all ${
+                                selectedVariant === v 
+                                  ? 'border-amber-400 bg-amber-500/20 text-amber-400 font-bold shadow-[0_0_10px_rgba(245,158,11,0.2)]' 
+                                  : 'border-white/10 bg-white/5 text-slate-400 hover:text-white hover:border-white/30'
+                              }`}
+                            >
+                              {v}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Variant Sub-menu: Extra Chocolate */}
+                      {isSelected && isExtraChoc && (
+                        <div className="flex gap-2 pl-4 animate-in slide-in-from-top-2 fade-in duration-200">
+                          {['Dark', 'Milk', 'White'].map(v => (
+                            <button
+                              key={v}
+                              onClick={(e) => { e.stopPropagation(); toggleAddon(addon, v); }}
+                              className={`px-3 py-1.5 text-xs rounded-lg border transition-all ${
+                                selectedVariant === v 
+                                  ? 'border-amber-400 bg-amber-500/20 text-amber-400 font-bold shadow-[0_0_10px_rgba(245,158,11,0.2)]' 
+                                  : 'border-white/10 bg-white/5 text-slate-400 hover:text-white hover:border-white/30'
+                              }`}
+                            >
+                              {v}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           <div className="pt-2">
             <Button 
               className="w-full h-12 bg-amber-500 hover:bg-amber-400 text-black font-extrabold rounded-xl shadow-lg shadow-amber-500/20 disabled:opacity-50"
               disabled={(() => {
-                const max = selectedProduct?.maxSelections || 1;
-                return selectedChocolates.length !== max;
+                if (selectedProduct?.isCustomizable && selectedProduct.customizationOptions && selectedProduct.customizationOptions.length > 0) {
+                  const max = selectedProduct.maxSelections || 1;
+                  return selectedChocolates.length !== max;
+                }
+                return false;
               })()}
               onClick={handleCustomizationSubmit}
             >

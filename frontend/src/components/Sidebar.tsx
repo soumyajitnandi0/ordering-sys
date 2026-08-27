@@ -12,6 +12,7 @@ import {
   BookOpen,
   Settings,
   Sparkles,
+  Receipt,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useStore } from "@/store/useStore";
@@ -21,6 +22,7 @@ const mainNavItems = [
   { name: "Kitchen Display", href: "/kitchen", icon: ChefHat, badge: "KDS" },
   { name: "Sales & Analytics", href: "/sales", icon: BarChart3 },
   { name: "Order History", href: "/orders", icon: ListOrdered },
+  { name: "Invoice Generator", href: "/invoice", icon: Receipt },
 ];
 
 const managementNavItems = [
@@ -35,7 +37,7 @@ export default function Sidebar() {
   return (
     <aside 
       className={cn(
-        "h-screen flex flex-col bg-[#08080c]/90 backdrop-blur-2xl border-r border-white/[0.08] transition-all duration-300 z-50 select-none relative",
+        "print:hidden h-screen flex flex-col bg-[#08080c]/90 backdrop-blur-2xl border-r border-white/[0.08] transition-all duration-300 z-50 select-none relative",
         isExpanded ? "w-[240px]" : "w-[80px]"
       )}
       onMouseEnter={() => setIsExpanded(true)}

@@ -18,9 +18,9 @@ export default function ClientLayoutWrapper({ children }: { children: React.Reac
       ) : (
         <>
           <Sidebar />
-          <div className="flex-1 flex flex-col h-full overflow-hidden z-10 relative">
+          <div className="flex-1 flex flex-col h-full overflow-hidden z-10 relative print:h-auto print:overflow-visible print:block">
             <Topbar />
-            <main className="flex-1 overflow-auto bg-transparent relative">
+            <main className="flex-1 overflow-auto bg-transparent relative print:h-auto print:overflow-visible print:block">
               {children}
             </main>
           </div>
