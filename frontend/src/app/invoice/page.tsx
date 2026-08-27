@@ -95,7 +95,7 @@ export default function InvoiceGeneratorPage() {
 
       // Temporarily make it opaque for the capture
       element.classList.remove('opacity-0');
-      const imgData = await toJpeg(element, { quality: 0.95, pixelRatio: 1.5, cacheBust: true });
+      const imgData = await toJpeg(element, { quality: 0.85, pixelRatio: 1.0, cacheBust: true });
       element.classList.add('opacity-0');
       
       // Restore background
