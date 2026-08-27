@@ -295,11 +295,15 @@ router.post('/email-invoice', async (req, res) => {
     }
 
     const transporter = nodemailer.createTransport({
-      service: 'gmail',
+      host: 'smtp.gmail.com',
+      port: 465,
+      secure: true, // Use SSL
       auth: {
         user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
-      }
+        pass: process.env.EMAIL_PASS?.replace(/\s+/g, '') // Strip spaces from App Password
+      },
+      connectionTimeout: 10000, // Fail fast if Gmail can't be reached
+      socketTimeout: 15000
     });
 
     const base64Data = pdfBase64.includes('base64,') ? pdfBase64.split('base64,')[1] : pdfBase64;
