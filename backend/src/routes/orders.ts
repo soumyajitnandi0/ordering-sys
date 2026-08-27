@@ -351,8 +351,8 @@ router.post('/email-invoice', async (req, res) => {
       ]
     };
 
-    await transporter.sendMail(mailOptions);
-    res.json({ message: 'Email sent successfully' });
+    transporter.sendMail(mailOptions).catch(err => console.error('Background Email Error:', err));
+    res.json({ message: 'Email queued for sending' });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
