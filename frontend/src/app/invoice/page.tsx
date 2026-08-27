@@ -89,10 +89,17 @@ export default function InvoiceGeneratorPage() {
       const element = document.getElementById('invoice-print-view');
       if (!element) throw new Error('Invoice view not found');
       
+      // Temporarily remove complex background for html-to-image performance
+      const originalBg = element.style.backgroundImage;
+      element.style.backgroundImage = 'none';
+
       // Temporarily make it opaque for the capture
       element.classList.remove('opacity-0');
-      const imgData = await toJpeg(element, { quality: 0.95, pixelRatio: 2 });
+      const imgData = await toJpeg(element, { quality: 0.95, pixelRatio: 1.5, cacheBust: true });
       element.classList.add('opacity-0');
+      
+      // Restore background
+      element.style.backgroundImage = originalBg;
       
       const pdf = new jsPDF('p', 'mm', 'a4');
       const pdfWidth = pdf.internal.pageSize.getWidth();

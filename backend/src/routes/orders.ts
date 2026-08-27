@@ -302,7 +302,8 @@ router.post('/email-invoice', async (req, res) => {
       }
     });
 
-    const pdfBuffer = Buffer.from(pdfBase64.replace(/^data:application\/pdf;filename=generated\.pdf;base64,/, ''), 'base64');
+    const base64Data = pdfBase64.includes('base64,') ? pdfBase64.split('base64,')[1] : pdfBase64;
+    const pdfBuffer = Buffer.from(base64Data, 'base64');
 
     const mailOptions = {
       from: `"Waffle Circle" <${process.env.EMAIL_USER}>`,
