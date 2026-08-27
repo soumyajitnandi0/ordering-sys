@@ -97,8 +97,8 @@ export default function InvoiceGeneratorPage() {
       // @ts-ignore
       const html2pdf = (await import('html2pdf.js')).default;
       
-      const opt = {
-        margin:       [10, 10, 10, 10], // top, left, bottom, right
+      const opt: any = {
+        margin:       10, // single number works perfectly for all sides
         filename:     `Invoice_${order.tokenNumber}.pdf`,
         image:        { type: 'jpeg', quality: 0.98 },
         html2canvas:  { scale: 2, useCORS: true, logging: false },
