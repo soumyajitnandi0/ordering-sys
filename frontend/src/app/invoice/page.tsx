@@ -14,6 +14,8 @@ import {
   Send
 } from 'lucide-react';
 
+import { toJpeg } from 'html-to-image';
+import { jsPDF } from 'jspdf';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
@@ -91,24 +93,32 @@ export default function InvoiceGeneratorPage() {
       // Temporarily remove complex background for html-to-image performance
       const originalBg = element.style.backgroundImage;
       element.style.backgroundImage = 'none';
+      
+      // Force print styles for the exact same look as window.print()
+      element.classList.remove('bg-[#fffdfa]', 'text-amber-950');
+      element.classList.add('bg-white', 'text-black');
 
       // Temporarily make it opaque for the capture
       element.classList.remove('opacity-0');
-      // @ts-ignore
-      const html2pdf = (await import('html2pdf.js')).default;
+      const imgData = await toJpeg(element, { quality: 0.90, pixelRatio: 1.5, cacheBust: true });
       
-      const opt: any = {
-        margin:       10, // single number works perfectly for all sides
-        filename:     `Invoice_${order.tokenNumber}.pdf`,
-        image:        { type: 'jpeg', quality: 0.98 },
-        html2canvas:  { scale: 2, useCORS: true, logging: false },
-        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
-        pagebreak:    { mode: ['css', 'legacy'] } // Respects page-break-inside: avoid
-      };
-
-      const pdfBase64 = await html2pdf().set(opt).from(element).outputPdf('datauristring');
+      const pdfWidth = 210; // Standard A4 width in mm
+      const pdfHeight = (element.offsetHeight * pdfWidth) / element.offsetWidth;
+      
+      // Use a custom PDF page size that exactly matches the full height of the receipt
+      // This completely prevents slicing through items and captures the entire order perfectly.
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: [pdfWidth, Math.max(297, pdfHeight)] // At least A4 height, but infinitely tall if needed
+      });
+      
+      pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+      const pdfBase64 = pdf.output('datauristring');
       
       element.classList.add('opacity-0');
+      element.classList.add('bg-[#fffdfa]', 'text-amber-950');
+      element.classList.remove('bg-white', 'text-black');
       // Restore background
       element.style.backgroundImage = originalBg;
       
