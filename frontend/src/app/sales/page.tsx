@@ -31,42 +31,50 @@ import { motion } from 'framer-motion';
 
 export default function SalesPage() {
   const [salesData, setSalesData] = useState<any>(null);
-  const [timeRange, setTimeRange] = useState<'today' | '7days' | 'month'>('today');
+  const [timeRange, setTimeRange] = useState<'today' | '7days' | 'month' | 'all' | 'custom'>('today');
+  const [customStart, setCustomStart] = useState<string>('');
+  const [customEnd, setCustomEnd] = useState<string>('');
 
   useEffect(() => {
     fetchSales();
     const interval = setInterval(fetchSales, 5 * 60 * 1000); // Live update every 5 minutes
     return () => clearInterval(interval);
-  }, [timeRange]);
+  }, [timeRange, customStart, customEnd]);
 
   const fetchSales = async () => {
     try {
-      const res = await api.get('/orders/analytics');
+      const params: any = { timeRange };
+      if (timeRange === 'custom') {
+        if (!customStart || !customEnd) return; // Wait until both are selected
+        params.startDate = customStart;
+        params.endDate = customEnd;
+      }
+      const res = await api.get('/orders/analytics', { params });
       setSalesData(res.data);
     } catch (err) {
       console.error(err);
     }
   };
 
-  const chartData = salesData?.hourlySales || [];
+  const chartData = salesData?.chartData || [];
 
-  const totalRevenue = salesData?.today?.revenue || 0;
-  const totalOrders = salesData?.today?.orders || 0;
-  const avgOrderValue = salesData?.today?.aov || 0;
+  const totalRevenue = salesData?.current?.revenue || 0;
+  const totalOrders = salesData?.current?.orders || 0;
+  const avgOrderValue = salesData?.current?.aov || 0;
 
-  const yesterdayRevenue = salesData?.yesterday?.revenue || 0;
-  const revGrowth = yesterdayRevenue > 0 
-    ? ((totalRevenue - yesterdayRevenue) / yesterdayRevenue * 100).toFixed(1) 
+  const previousRevenue = salesData?.previous?.revenue || 0;
+  const revGrowth = previousRevenue > 0 
+    ? ((totalRevenue - previousRevenue) / previousRevenue * 100).toFixed(1) 
     : 100;
 
-  const yesterdayOrders = salesData?.yesterday?.orders || 0;
-  const ordGrowth = yesterdayOrders > 0 
-    ? ((totalOrders - yesterdayOrders) / yesterdayOrders * 100).toFixed(1) 
+  const previousOrders = salesData?.previous?.orders || 0;
+  const ordGrowth = previousOrders > 0 
+    ? ((totalOrders - previousOrders) / previousOrders * 100).toFixed(1) 
     : 100;
     
   const topProducts = salesData?.topProducts || [];
   const maxTopQty = topProducts.length > 0 ? topProducts[0].quantity : 1;
-  const totalUnits = salesData?.today?.unitsSold || 0;
+  const totalUnits = salesData?.current?.unitsSold || 0;
 
   const paymentMetrics = salesData?.paymentMetrics || { cash: { revenue: 0 }, upi: { revenue: 0 } };
   const paymentData = [
@@ -87,37 +95,76 @@ export default function SalesPage() {
           <p className="text-sm text-slate-400">Real-time revenue metrics, item breakdown, and peak performance</p>
         </div>
 
-        <div className="flex items-center bg-white/[0.04] p-1.5 rounded-2xl border border-white/[0.08]">
-          <button 
-            onClick={() => setTimeRange('today')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-              timeRange === 'today' 
-                ? 'bg-amber-500 text-black shadow-md shadow-amber-500/20' 
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            Today
-          </button>
-          <button 
-            onClick={() => setTimeRange('7days')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-              timeRange === '7days' 
-                ? 'bg-amber-500 text-black shadow-md shadow-amber-500/20' 
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            Last 7 Days
-          </button>
-          <button 
-            onClick={() => setTimeRange('month')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-              timeRange === 'month' 
-                ? 'bg-amber-500 text-black shadow-md shadow-amber-500/20' 
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            This Month
-          </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {timeRange === 'custom' && (
+            <div className="flex items-center gap-2 bg-white/[0.04] p-1.5 rounded-2xl border border-white/[0.08]">
+              <input 
+                type="date" 
+                value={customStart}
+                onChange={(e) => setCustomStart(e.target.value)}
+                className="bg-transparent text-slate-300 text-xs px-2 py-1 outline-none [color-scheme:dark]"
+              />
+              <span className="text-slate-500 text-xs">to</span>
+              <input 
+                type="date" 
+                value={customEnd}
+                onChange={(e) => setCustomEnd(e.target.value)}
+                className="bg-transparent text-slate-300 text-xs px-2 py-1 outline-none [color-scheme:dark]"
+              />
+            </div>
+          )}
+          <div className="flex items-center bg-white/[0.04] p-1.5 rounded-2xl border border-white/[0.08]">
+            <button 
+              onClick={() => setTimeRange('today')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                timeRange === 'today' 
+                  ? 'bg-amber-500 text-black shadow-md shadow-amber-500/20' 
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Today
+            </button>
+            <button 
+              onClick={() => setTimeRange('7days')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                timeRange === '7days' 
+                  ? 'bg-amber-500 text-black shadow-md shadow-amber-500/20' 
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Last 7 Days
+            </button>
+            <button 
+              onClick={() => setTimeRange('month')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                timeRange === 'month' 
+                  ? 'bg-amber-500 text-black shadow-md shadow-amber-500/20' 
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              This Month
+            </button>
+            <button 
+              onClick={() => setTimeRange('all')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                timeRange === 'all' 
+                  ? 'bg-amber-500 text-black shadow-md shadow-amber-500/20' 
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              All Time
+            </button>
+            <button 
+              onClick={() => setTimeRange('custom')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                timeRange === 'custom' 
+                  ? 'bg-amber-500 text-black shadow-md shadow-amber-500/20' 
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Custom
+            </button>
+          </div>
         </div>
       </div>
 
@@ -142,7 +189,7 @@ export default function SalesPage() {
           </div>
           <div className="mt-3 flex items-center gap-1.5 text-xs text-emerald-400 font-semibold">
             <ArrowUpRight className="w-4 h-4" />
-            <span>{Number(revGrowth) > 0 ? '+' : ''}{revGrowth}% from yesterday</span>
+            <span>{Number(revGrowth) > 0 ? '+' : ''}{revGrowth}% from previous</span>
           </div>
         </motion.div>
 
@@ -200,7 +247,7 @@ export default function SalesPage() {
             {totalUnits} units
           </h2>
           <div className="mt-3 flex items-center gap-1.5 text-xs text-purple-300 font-semibold">
-            <span>Peak hour: {salesData?.today?.orders > 0 ? chartData.reduce((max: any, c: any) => c.orders > max.orders ? c : max, chartData[0])?.hour : 'N/A'}</span>
+            <span>Peak: {salesData?.current?.orders > 0 ? chartData.reduce((max: any, c: any) => c.orders > max.orders ? c : max, chartData[0])?.label : 'N/A'}</span>
           </div>
         </motion.div>
 
@@ -233,7 +280,7 @@ export default function SalesPage() {
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" vertical={false} />
-                <XAxis dataKey="hour" stroke="#94a3b8" fontSize={12} tickLine={false} />
+                <XAxis dataKey="label" stroke="#94a3b8" fontSize={12} tickLine={false} />
                 <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} tickFormatter={(v) => `₹${v}`} />
                 <Tooltip 
                   contentStyle={{ backgroundColor: '#09090d', borderColor: '#ffffff20', borderRadius: '12px', color: '#fff' }}

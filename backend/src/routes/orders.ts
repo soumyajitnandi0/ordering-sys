@@ -126,36 +126,90 @@ router.get('/today', async (req, res) => {
 
 router.get('/analytics', async (req, res) => {
   try {
+    const { timeRange, startDate, endDate } = req.query;
     const now = new Date();
-    const options: Intl.DateTimeFormatOptions = { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' };
-    const dateFormatter = new Intl.DateTimeFormat('en-CA', options);
-    const dateParts = dateFormatter.formatToParts(now);
-    const year = dateParts.find((p) => p.type === 'year')?.value;
-    const month = dateParts.find((p) => p.type === 'month')?.value;
-    const day = dateParts.find((p) => p.type === 'day')?.value;
-    const today = `${year}-${month}-${day}`;
     
-    // Yesterday
-    const yesterdayDate = new Date(now);
-    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
-    const yesterdayParts = dateFormatter.formatToParts(yesterdayDate);
-    const yYear = yesterdayParts.find((p) => p.type === 'year')?.value;
-    const yMonth = yesterdayParts.find((p) => p.type === 'month')?.value;
-    const yDay = yesterdayParts.find((p) => p.type === 'day')?.value;
-    const yesterday = `${yYear}-${yMonth}-${yDay}`;
+    const formatDate = (date: Date) => {
+      const options: Intl.DateTimeFormatOptions = { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' };
+      const dateFormatter = new Intl.DateTimeFormat('en-CA', options);
+      const dateParts = dateFormatter.formatToParts(date);
+      const year = dateParts.find((p) => p.type === 'year')?.value;
+      const month = dateParts.find((p) => p.type === 'month')?.value;
+      const day = dateParts.find((p) => p.type === 'day')?.value;
+      return `${year}-${month}-${day}`;
+    };
 
-    const todayOrders = await Order.find({ tokenDate: today, status: { $ne: 'CANCELLED' } });
-    const yesterdayOrders = await Order.find({ tokenDate: yesterday, status: { $ne: 'CANCELLED' } });
-
-    const todayRevenue = todayOrders.reduce((sum, order) => sum + order.total, 0);
-    const yesterdayRevenue = yesterdayOrders.reduce((sum, order) => sum + order.total, 0);
+    const todayStr = formatDate(now);
     
-    const todayAOV = todayOrders.length ? todayRevenue / todayOrders.length : 0;
-    const yesterdayAOV = yesterdayOrders.length ? yesterdayRevenue / yesterdayOrders.length : 0;
+    let queryStartDate = todayStr;
+    let queryEndDate = todayStr;
+    
+    let prevStartDate = formatDate(new Date(now.setDate(now.getDate() - 1)));
+    let prevEndDate = prevStartDate;
+
+    now.setTime(new Date().getTime());
+
+    if (timeRange === 'all') {
+      queryStartDate = '2000-01-01';
+      prevStartDate = '1900-01-01';
+      prevEndDate = '1900-01-01';
+    } else if (timeRange === '7days') {
+      const start = new Date(now);
+      start.setDate(start.getDate() - 6);
+      queryStartDate = formatDate(start);
+      
+      const prevStart = new Date(start);
+      prevStart.setDate(prevStart.getDate() - 7);
+      prevStartDate = formatDate(prevStart);
+      
+      const prevEnd = new Date(now);
+      prevEnd.setDate(prevEnd.getDate() - 7);
+      prevEndDate = formatDate(prevEnd);
+    } else if (timeRange === 'month') {
+      const start = new Date(now.getFullYear(), now.getMonth(), 1);
+      queryStartDate = formatDate(start);
+      
+      const prevStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      prevStartDate = formatDate(prevStart);
+      
+      const prevEnd = new Date(now.getFullYear(), now.getMonth(), 0);
+      prevEndDate = formatDate(prevEnd);
+    } else if (startDate && endDate) {
+      queryStartDate = startDate as string;
+      queryEndDate = endDate as string;
+      
+      const s = new Date(queryStartDate);
+      const e = new Date(queryEndDate);
+      const diffTime = Math.abs(e.getTime() - s.getTime());
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+      
+      const prevStart = new Date(s);
+      prevStart.setDate(prevStart.getDate() - diffDays);
+      prevStartDate = formatDate(prevStart);
+      
+      const prevEnd = new Date(e);
+      prevEnd.setDate(prevEnd.getDate() - diffDays);
+      prevEndDate = formatDate(prevEnd);
+    }
+
+    const currentOrders = await Order.find({ 
+      tokenDate: { $gte: queryStartDate, $lte: queryEndDate }, 
+      status: { $ne: 'CANCELLED' } 
+    });
+    const previousOrders = await Order.find({ 
+      tokenDate: { $gte: prevStartDate, $lte: prevEndDate }, 
+      status: { $ne: 'CANCELLED' } 
+    });
+
+    const currentRevenue = currentOrders.reduce((sum, order) => sum + order.total, 0);
+    const previousRevenue = previousOrders.reduce((sum, order) => sum + order.total, 0);
+    
+    const currentAOV = currentOrders.length ? currentRevenue / currentOrders.length : 0;
+    const previousAOV = previousOrders.length ? previousRevenue / previousOrders.length : 0;
 
     // Top products
     const productSales: Record<string, { name: string; quantity: number; revenue: number }> = {};
-    todayOrders.forEach(order => {
+    currentOrders.forEach(order => {
       order.items.forEach((item: any) => {
         if (!productSales[item.productId]) {
           productSales[item.productId] = { name: item.name, quantity: 0, revenue: 0 };
@@ -169,28 +223,67 @@ router.get('/analytics', async (req, res) => {
       .sort((a, b) => b.quantity - a.quantity)
       .slice(0, 5);
 
-    // Hourly sales for today
-    const hourlySales = Array.from({ length: 24 }, (_, i) => ({
-      hour: `${i.toString().padStart(2, '0')}:00`,
-      revenue: 0,
-      orders: 0
-    }));
-    
-    todayOrders.forEach(order => {
-      const orderHour = new Date(order.createdAt).getHours();
-      // Ensure we map correctly in UTC vs IST if needed, but since we use basic getHours it's server time based.
-      if (orderHour >= 0 && orderHour < 24) {
-        hourlySales[orderHour].revenue += order.total;
-        hourlySales[orderHour].orders += 1;
+    // Chart Data (Hourly for single day, Daily for multi-day)
+    let chartData: { label: string; revenue: number; orders: number }[] = [];
+    if (queryStartDate === queryEndDate) {
+      chartData = Array.from({ length: 24 }, (_, i) => ({
+        label: `${i.toString().padStart(2, '0')}:00`,
+        revenue: 0,
+        orders: 0
+      }));
+      
+      currentOrders.forEach(order => {
+        const orderHour = new Date(order.createdAt).getHours();
+        if (orderHour >= 0 && orderHour < 24) {
+          chartData[orderHour].revenue += order.total;
+          chartData[orderHour].orders += 1;
+        }
+      });
+      chartData = chartData.filter(h => h.orders > 0 || parseInt(h.label) >= 8 && parseInt(h.label) <= 22);
+    } else if (timeRange === 'all') {
+      const dateMap: Record<string, { label: string; revenue: number; orders: number }> = {};
+      currentOrders.forEach(order => {
+        const d = new Date(order.tokenDate);
+        const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        const label = d.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
+        
+        if (!dateMap[dateStr]) {
+          dateMap[dateStr] = { label, revenue: 0, orders: 0 };
+        }
+        dateMap[dateStr].revenue += order.total;
+        dateMap[dateStr].orders += 1;
+      });
+      // Sort keys (YYYY-MM)
+      chartData = Object.keys(dateMap).sort().map(key => dateMap[key]);
+    } else {
+      const dateMap: Record<string, { label: string; revenue: number; orders: number }> = {};
+      
+      const s = new Date(queryStartDate);
+      const e = new Date(queryEndDate);
+      // Ensure we don't loop infinitely if dates are bad
+      if (s <= e && e.getTime() - s.getTime() < 1000 * 60 * 60 * 24 * 365 * 5) {
+        for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
+          const dateStr = formatDate(d);
+          const label = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+          dateMap[dateStr] = { label, revenue: 0, orders: 0 };
+        }
       }
-    });
 
-    // Calculate total units sold excluding addons
-    let todayUnitsSold = 0;
-    todayOrders.forEach(order => {
+      currentOrders.forEach(order => {
+        if (dateMap[order.tokenDate]) {
+          dateMap[order.tokenDate].revenue += order.total;
+          dateMap[order.tokenDate].orders += 1;
+        }
+      });
+      chartData = Object.values(dateMap);
+    }
+
+    // Units sold excluding addons
+    let currentUnitsSold = 0;
+    currentOrders.forEach(order => {
       order.items.forEach((item: any) => {
         if (item.category !== 'ADD-ONS') {
-          todayUnitsSold += item.quantity;
+          currentUnitsSold += item.quantity;
         }
       });
     });
@@ -200,8 +293,7 @@ router.get('/analytics', async (req, res) => {
     let cashRevenue = 0;
     let upiRevenue = 0;
 
-    todayOrders.forEach(order => {
-      // @ts-ignore - Handle possible lack of paymentMethod in older records by defaulting to CASH
+    currentOrders.forEach(order => {
       if (order.paymentMethod === 'UPI') {
         upiOrders += 1;
         upiRevenue += order.total;
@@ -212,23 +304,23 @@ router.get('/analytics', async (req, res) => {
     });
 
     res.json({
-      today: {
-        revenue: todayRevenue,
-        orders: todayOrders.length,
-        aov: todayAOV,
-        unitsSold: todayUnitsSold
+      current: {
+        revenue: currentRevenue,
+        orders: currentOrders.length,
+        aov: currentAOV,
+        unitsSold: currentUnitsSold
       },
-      yesterday: {
-        revenue: yesterdayRevenue,
-        orders: yesterdayOrders.length,
-        aov: yesterdayAOV
+      previous: {
+        revenue: previousRevenue,
+        orders: previousOrders.length,
+        aov: previousAOV
       },
       paymentMetrics: {
         cash: { orders: cashOrders, revenue: cashRevenue },
         upi: { orders: upiOrders, revenue: upiRevenue }
       },
       topProducts,
-      hourlySales: hourlySales.filter(h => h.orders > 0 || parseInt(h.hour) >= 8 && parseInt(h.hour) <= 22) // Filter relevant hours
+      chartData
     });
 
   } catch (err: any) {
