@@ -12,8 +12,11 @@ import {
   Sparkles,
   BarChart3,
   Layers,
-  Wallet
+  Wallet,
+  Download
 } from 'lucide-react';
+import { toJpeg } from 'html-to-image';
+import { jsPDF } from 'jspdf';
 import {
   ResponsiveContainer,
   AreaChart,
@@ -56,6 +59,28 @@ export default function SalesPage() {
     }
   };
 
+  const downloadPDF = async () => {
+    try {
+      const element = document.getElementById('all-items-table');
+      if (!element) return;
+      
+      const imgData = await toJpeg(element, { quality: 0.95, pixelRatio: 2, cacheBust: true, backgroundColor: '#09090d' });
+      const pdfWidth = 210;
+      const pdfHeight = (element.offsetHeight * pdfWidth) / element.offsetWidth;
+      
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: [pdfWidth, Math.max(297, pdfHeight)]
+      });
+      
+      pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+      pdf.save('all-menu-items-analytics.pdf');
+    } catch (err) {
+      console.error('Failed to generate PDF', err);
+    }
+  };
+
   const chartData = salesData?.chartData || [];
 
   const totalRevenue = salesData?.current?.revenue || 0;
@@ -71,9 +96,9 @@ export default function SalesPage() {
   const ordGrowth = previousOrders > 0 
     ? ((totalOrders - previousOrders) / previousOrders * 100).toFixed(1) 
     : 100;
-    
   const topProducts = salesData?.topProducts || [];
   const maxTopQty = topProducts.length > 0 ? topProducts[0].quantity : 1;
+  const allProducts = salesData?.allProducts || [];
   const totalUnits = salesData?.current?.unitsSold || 0;
 
   const paymentMetrics = salesData?.paymentMetrics || { cash: { revenue: 0 }, upi: { revenue: 0 } };
@@ -378,6 +403,64 @@ export default function SalesPage() {
                 </PieChart>
               </ResponsiveContainer>
             )}
+          </div>
+        </div>
+        
+        {/* All Menu Items Analytics */}
+        <div className="lg:col-span-2 glass-panel rounded-2xl p-6 border border-white/[0.08] flex flex-col max-h-[400px]">
+          <div className="flex justify-between items-center mb-4">
+            <div>
+              <h3 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
+                <Layers className="w-5 h-5 text-amber-400" /> All Menu Items Performance
+              </h3>
+              <p className="text-xs text-slate-400">Detailed breakdown of units sold and revenue</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <Badge className="bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                {allProducts.length} Items
+              </Badge>
+              <button 
+                onClick={downloadPDF}
+                className="bg-white/5 hover:bg-white/10 text-slate-300 p-1.5 rounded-lg border border-white/10 transition-colors"
+                title="Download as PDF"
+              >
+                <Download className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+          
+          <div className="flex-1 overflow-y-auto custom-scrollbar pr-2">
+            <div id="all-items-table" className="bg-[#09090d] p-4 rounded-xl">
+              {allProducts.length === 0 ? (
+                <div className="text-sm text-slate-500 text-center py-10">No item data available</div>
+              ) : (
+                <table className="w-full text-left text-sm">
+                <thead className="sticky top-0 bg-[#09090d]/90 backdrop-blur-sm z-10">
+                  <tr>
+                    <th className="pb-3 text-slate-400 font-semibold uppercase text-xs w-[40%]">Item Name</th>
+                    <th className="pb-3 text-slate-400 font-semibold uppercase text-xs w-[25%] text-left">Category</th>
+                    <th className="pb-3 text-slate-400 font-semibold uppercase text-xs text-center">Units Sold</th>
+                    <th className="pb-3 text-slate-400 font-semibold uppercase text-xs text-right">Revenue</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/[0.04]">
+                  {allProducts.map((item: any, i: number) => (
+                    <tr key={i} className="hover:bg-white/[0.02] transition-colors group">
+                      <td className="py-3 text-slate-200 group-hover:text-white transition-colors">
+                        <div className="flex items-center gap-2">
+                          <span className="w-4 h-4 rounded bg-white/[0.04] text-[9px] flex items-center justify-center text-slate-400">{i+1}</span>
+                          {item.name}
+                        </div>
+                      </td>
+                      <td className="py-3 text-amber-500/80 text-[10px] font-bold tracking-wider uppercase">{item.category}</td>
+                      <td className="py-3 text-center text-white font-medium bg-white/[0.02] rounded-md my-1">{item.quantity}</td>
+                      <td className="py-3 text-right text-emerald-400 font-mono">₹{item.revenue.toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            </div>
           </div>
         </div>
       </div>

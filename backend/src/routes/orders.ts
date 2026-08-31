@@ -208,20 +208,21 @@ router.get('/analytics', async (req, res) => {
     const previousAOV = previousOrders.length ? previousRevenue / previousOrders.length : 0;
 
     // Top products
-    const productSales: Record<string, { name: string; quantity: number; revenue: number }> = {};
+    const productSales: Record<string, { name: string; quantity: number; revenue: number; category: string }> = {};
     currentOrders.forEach(order => {
       order.items.forEach((item: any) => {
         if (!productSales[item.productId]) {
-          productSales[item.productId] = { name: item.name, quantity: 0, revenue: 0 };
+          productSales[item.productId] = { name: item.name, quantity: 0, revenue: 0, category: item.category || 'Uncategorized' };
         }
         productSales[item.productId].quantity += item.quantity;
         productSales[item.productId].revenue += (item.price * item.quantity);
       });
     });
 
-    const topProducts = Object.values(productSales)
-      .sort((a, b) => b.quantity - a.quantity)
-      .slice(0, 5);
+    const allProducts = Object.values(productSales)
+      .sort((a, b) => b.quantity - a.quantity);
+
+    const topProducts = allProducts.slice(0, 5);
 
     // Chart Data (Hourly for single day, Daily for multi-day)
     let chartData: { label: string; revenue: number; orders: number }[] = [];
@@ -320,6 +321,7 @@ router.get('/analytics', async (req, res) => {
         upi: { orders: upiOrders, revenue: upiRevenue }
       },
       topProducts,
+      allProducts,
       chartData
     });
 
